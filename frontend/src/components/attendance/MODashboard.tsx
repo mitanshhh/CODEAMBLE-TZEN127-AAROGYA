@@ -31,9 +31,11 @@ export default function MODashboard() {
       const role = localStorage.getItem("role") || "MEDICAL_OFFICER";
       const headers = { 'X-Role': role };
       
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      
       const [statsRes, recordsRes] = await Promise.all([
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/dashboard`, { headers }),
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/records?status=${filterStatus}`, { headers })
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/dashboard${hospitalQuery}`, { headers }),
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/records${hospitalQuery ? hospitalQuery + '&' : '?'}status=${filterStatus}`, { headers })
       ]);
       
       if (statsRes.ok) setStats(await statsRes.json());

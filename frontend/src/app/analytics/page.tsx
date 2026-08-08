@@ -58,6 +58,28 @@ export default function Analytics() {
     }
   };
 
+  const kpis = {
+    total_medicines: 2450,
+    out_of_stock: 12,
+    occupancy_percentage: 78,
+    occupied_beds: 115,
+    doctors_present: 8,
+    total_doctors: 10,
+    patient_footfall_today: 342
+  };
+
+  const charts = {
+    footfall: [
+      { date: "Mon", patients: 120 },
+      { date: "Tue", patients: 150 },
+      { date: "Wed", patients: 180 },
+      { date: "Thu", patients: 140 },
+      { date: "Fri", patients: 200 },
+      { date: "Sat", patients: 250 },
+      { date: "Sun", patients: 190 }
+    ]
+  };
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center flex-col gap-4">

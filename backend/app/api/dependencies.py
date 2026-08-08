@@ -29,15 +29,38 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
-def require_role(allowed_roles: List[UserRole]):
-    def role_checker(current_user: User = Depends(get_current_user)):
-        if current_user.role not in allowed_roles:
+from app.core.rbac import ROLE_PERMISSIONS
+
+class RoleChecker:
+    def __init__(self, allowed_roles: List[UserRole]):
+        self.allowed_roles = allowed_roles
+
+    def __call__(self, current_user: User = Depends(get_current_user)):
+        if current_user.role == UserRole.DEVELOPER:
+            return current_user
+        if current_user.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have enough privileges to access this resource"
+                detail="Operation not permitted for your role"
             )
         return current_user
-    return role_checker
+
+def require_role(allowed_roles: List[UserRole]):
+    return RoleChecker(allowed_roles)
+
+def require_permission(required_permission: str):
+    def permission_checker(current_user: User = Depends(get_current_user)):
+        if current_user.role == UserRole.DEVELOPER:
+            return current_user
+            
+        user_permissions = ROLE_PERMISSIONS.get(current_user.role, [])
+        if required_permission not in user_permissions and "all" not in user_permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Operation not permitted for your role"
+            )
+        return current_user
+    return permission_checker
 
 def resolve_hospital_id(
     hospital_id: Optional[int] = Query(None, description="Hospital ID (Required for Admins/Devs)"),

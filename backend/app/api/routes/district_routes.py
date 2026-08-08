@@ -6,6 +6,7 @@ from app.db.database import get_db
 from app.models.district import ResourceRequest
 from app.models.health_centre import HealthCentre
 from app.models.user import User, UserRole
+from app.models.notification import Notification
 from app.schemas.district import ResourceRequestResponse, ResourceRequestCreate, ResourceRequestUpdate
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
 
@@ -87,7 +88,28 @@ def update_resource_request(
     if not req:
         raise HTTPException(status_code=404, detail="Resource request not found")
         
-    req.status = update_in.status
+    if update_in.status:
+        req.status = update_in.status
+    if update_in.admin_note:
+        req.admin_note = update_in.admin_note
+        
+    # Trigger a notification to the PHC
+    admin_action = "Approved" if req.status == "APPROVED" else "Rejected" if req.status == "REJECTED" else req.status
+    
+    # We should notify users at the requesting PHC. For simplicity, we just create a broadcast notification 
+    # for that PHC or the PHC_ADMIN role.
+    # But since Notification model in this app might not support hospital_id targeting natively, we will 
+    # just create a generic one for now (or let the PHC staff poll requests). 
+    # Find an appropriate user to notify (e.g., any user at that PHC)
+    target_user = db.query(User).filter(User.hospital_id == req.requesting_phc_id).first()
+    if target_user:
+        notif = Notification(
+            user_id=target_user.id,
+            title=f"Resource Request {admin_action}",
+            message=f"Request for {req.resource_name}: {update_in.admin_note or 'No notes provided.'}"
+        )
+        db.add(notif)
+    
     db.commit()
     db.refresh(req)
     return req

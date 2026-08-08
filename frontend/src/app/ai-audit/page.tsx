@@ -18,7 +18,8 @@ export default function AIAuditReports() {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/reports/`);
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/reports/${hospitalQuery}`);
       if (res.ok) {
         const data = await res.json();
         setReports(data);
@@ -37,7 +38,8 @@ export default function AIAuditReports() {
   const generateReport = async () => {
     setGenerating(true);
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/reports/generate`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/reports/generate-pdf${hospitalQuery}`, {
         method: "POST"
       });
       if (res.ok) {
@@ -49,6 +51,27 @@ export default function AIAuditReports() {
       console.error(err);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleDownload = async (reportId: number) => {
+    try {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/reports/${reportId}/download${hospitalQuery}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Aarogya_Audit_Report_${reportId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error("Failed to download report");
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -98,7 +121,7 @@ export default function AIAuditReports() {
                   <div className="flex items-center gap-2 mb-2">
                     <Calendar className="w-4 h-4 text-muted-foreground" />
                     <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                      {report.report_month} Audit
+                      {report.month_year} Audit
                     </span>
                   </div>
                   <h3 className="text-xl font-bold text-foreground mb-1">
@@ -136,11 +159,10 @@ export default function AIAuditReports() {
 
                 <div>
                   <Button 
-  onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}${report.pdf_url}`, "_blank")}
-  variant="outline" 
-  className="flex items-center gap-2"
->
-                    <Download className="w-4 h-4" />
+                    onClick={() => handleDownload(report.id)}
+                    variant="outline" 
+                    className="flex items-center gap-2 border-primary/20 text-primary hover:bg-primary/10 rounded-lg cursor-pointer"
+                  >
                     Download PDF
                   </Button>
                 </div>

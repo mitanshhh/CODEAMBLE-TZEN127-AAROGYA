@@ -9,8 +9,11 @@ class ResourceRequest(Base):
     requesting_phc_id = Column(Integer, ForeignKey("health_centres.id"), nullable=False, index=True)
     target_district = Column(String, nullable=False, index=True)
     resource_type = Column(String, nullable=False) # Medicine/Equipment/Staff/Beds
+    resource_name = Column(String, nullable=True) # Name of the specific item being requested
     quantity = Column(Integer, nullable=False)
     urgency = Column(String, nullable=False) # LOW/MEDIUM/HIGH/CRITICAL
     status = Column(String, default="PENDING", index=True) # PENDING/APPROVED/REJECTED/FULFILLED
     notes = Column(Text, nullable=True)
+    admin_note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

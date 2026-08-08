@@ -15,7 +15,10 @@ def get_inventory_insights(inventory_data: list) -> str:
     
     Data: {inventory_data}
     
-    Return ONLY a valid JSON object.
+    Return ONLY a valid JSON object strictly matching this schema:
+    {{
+        "insights": "Detailed markdown string containing your analysis"
+    }}
     """
     try:
         response = client.models.generate_content(

@@ -56,10 +56,10 @@ export default function DistrictAdminDashboard() {
     try {
       const token = localStorage.getItem("token") || "mock_token";
       const role = localStorage.getItem("role") || "DISTRICT_ADMIN";
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/requests/${selectedReq.id}/approve`, {
-        method: "POST",
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/resource-request/${selectedReq.id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-Role": role },
-        body: JSON.stringify({ custom_message: customReply })
+        body: JSON.stringify({ status: "APPROVED", admin_note: customReply })
       });
       if(res.ok) {
         toast.success("Request approved! AI letter sent to PHC.");
@@ -80,10 +80,10 @@ export default function DistrictAdminDashboard() {
     try {
       const token = localStorage.getItem("token") || "mock_token";
       const role = localStorage.getItem("role") || "DISTRICT_ADMIN";
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/requests/${selectedReq.id}/reject`, {
-        method: "POST",
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/resource-request/${selectedReq.id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-Role": role },
-        body: JSON.stringify({ custom_message: customReply })
+        body: JSON.stringify({ status: "REJECTED", admin_note: customReply })
       });
       if(res.ok) {
         toast.success("Request rejected.");
@@ -148,6 +148,7 @@ export default function DistrictAdminDashboard() {
   };
 
   const pendingRequests = requests.filter(r => r.status === "PENDING");
+  const historyRequests = requests.filter(r => r.status !== "PENDING").reverse();
 
   return (
     <div className="flex flex-col gap-6">
@@ -205,30 +206,6 @@ export default function DistrictAdminDashboard() {
         <div className="col-span-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="border-border shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
             <CardContent className="p-6 flex flex-col h-full overflow-hidden">
-              <div className="flex items-center gap-2 mb-4 text-primary">
-                <Sparkles className="w-5 h-5" />
-                <h3 className="text-sm font-bold">AI Resource Optimization</h3>
-                <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                  <Bot className="w-3 h-3" />
-                  AI Forecast
-                </span>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-                <p className="text-sm text-muted-foreground mb-4">The AI has analyzed district-wide consumption rates. Based on recent spikes, consider redistributing essential medicines to the following critical centres.</p>
-                <div className="bg-primary/5 rounded-lg p-4 border border-primary/10">
-                  <h4 className="text-xs font-bold text-primary mb-2 uppercase tracking-wide">Suggested Re-allocations</h4>
-                  <ul className="text-sm space-y-2 text-foreground/80">
-                    <li className="flex justify-between items-center"><span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-primary"></div> Paracetamol (500mg)</span> <span className="text-xs font-medium bg-white px-2 py-0.5 rounded border border-border">To PHC North</span></li>
-                    <li className="flex justify-between items-center"><span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-primary"></div> Amoxicillin</span> <span className="text-xs font-medium bg-white px-2 py-0.5 rounded border border-border">To CHC Central</span></li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="border-border shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
-            <CardContent className="p-6 flex flex-col h-full overflow-hidden">
               <div className="flex items-center gap-2 mb-4 text-foreground">
                 <AlertTriangle className="w-5 h-5 text-muted-foreground" />
                 <h3 className="text-sm font-bold">Resource Requests</h3>
@@ -244,11 +221,43 @@ export default function DistrictAdminDashboard() {
                   pendingRequests.map((req) => (
                     <div key={req.id} onClick={() => setSelectedReq(req)} className="bg-muted/30 rounded-lg p-3 border border-border cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
                       <div className="flex justify-between items-start mb-1">
-                        <h4 className="text-sm font-semibold text-foreground">Request: {req.item_name}</h4>
-                        <span className="text-[10px] text-muted-foreground bg-white px-1.5 py-0.5 rounded border border-border">{new Date(req.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <h4 className="text-sm font-semibold text-foreground">Request: {req.resource_name}</h4>
+                        <span className="text-[10px] text-muted-foreground bg-white px-1.5 py-0.5 rounded border border-border">{new Date(req.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-2">From: {req.phc_name}</p>
+                      <p className="text-xs text-muted-foreground mb-2">From PHC ID: {req.requesting_phc_id}</p>
                       <p className="text-xs text-foreground/80 line-clamp-2">{req.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-border shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
+            <CardContent className="p-6 flex flex-col h-full overflow-hidden">
+              <div className="flex items-center gap-2 mb-4 text-foreground">
+                <CheckCircle className="w-5 h-5 text-muted-foreground" />
+                <h3 className="text-sm font-bold">Request History</h3>
+                <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                  {historyRequests.length} Handled
+                </span>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+                {historyRequests.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground text-sm">No history available</div>
+                ) : (
+                  historyRequests.map((req) => (
+                    <div key={req.id} className="bg-muted/30 rounded-lg p-3 border border-border transition-colors">
+                      <div className="flex justify-between items-start mb-1">
+                        <h4 className="text-sm font-semibold text-foreground">Request: {req.resource_name}</h4>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${req.status === 'APPROVED' ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200'}`}>
+                          {req.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">From PHC ID: {req.requesting_phc_id}</p>
+                      <p className="text-xs text-foreground/80 line-clamp-2 mb-2">{req.message}</p>
+                      <p className="text-[10px] text-muted-foreground italic">Admin Note: {req.admin_note || "None"}</p>
                     </div>
                   ))
                 )}
@@ -261,16 +270,15 @@ export default function DistrictAdminDashboard() {
       <Dialog open={!!selectedReq} onOpenChange={() => setSelectedReq(null)}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Resource Request Details</DialogTitle>
-            <DialogDescription>From: {selectedReq?.phc_name} • {selectedReq && new Date(selectedReq.timestamp).toLocaleString()}</DialogDescription>
+            <DialogTitle>Evaluate Resource Request</DialogTitle>
+            <DialogDescription>
+              Review the request for <strong>{selectedReq?.resource_name}</strong> from PHC ID <strong>{selectedReq?.requesting_phc_id}</strong>.
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <h4 className="font-semibold text-sm mb-1">Item Requested:</h4>
-            <p className="text-sm bg-muted p-2 rounded mb-4">{selectedReq?.item_name}</p>
-            
-            <h4 className="font-semibold text-sm mb-1">Message from PHC:</h4>
-            <div className="text-sm bg-muted p-3 rounded mb-4 max-h-40 overflow-y-auto whitespace-pre-wrap">
-              {selectedReq?.message}
+          <div className="py-2">
+            <div className="bg-muted/30 p-3 rounded-lg border border-border text-sm mb-4">
+              <span className="font-semibold text-foreground block mb-1">PHC Notes:</span>
+              <span className="text-muted-foreground">{selectedReq?.notes || "No additional notes provided."}</span>
             </div>
             
             <h4 className="font-semibold text-sm mb-1">Admin Reply (Optional):</h4>

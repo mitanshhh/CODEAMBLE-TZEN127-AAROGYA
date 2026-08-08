@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { QrCode, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function QRGenerator() {
+  const { selectedHospitalId } = useAuth();
   const [qrToken, setQrToken] = useState("");
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,7 +23,8 @@ export default function QRGenerator() {
       const role = localStorage.getItem("role") || "MEDICAL_OFFICER";
       
       const body = lat && lng ? JSON.stringify({ lat, lng }) : undefined;
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/qr/generate`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/qr/generate${hospitalQuery}`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${authToken}`, 
@@ -66,7 +69,7 @@ export default function QRGenerator() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (open) {
-      if (!token) generateQR();
+      if (!qrToken) generateQR();
       // Regenerate QR every 4.5 minutes (270,000 ms) to keep it fresh
       interval = setInterval(generateQR, 270000);
     }

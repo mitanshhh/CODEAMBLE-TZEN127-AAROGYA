@@ -7,6 +7,7 @@ class InventoryItemBase(BaseModel):
     category: str
     quantity: int = 0
     unit: str
+    price: int = 0
     min_threshold: int = 0
     expiry_date: Optional[date] = None
     batch_number: Optional[str] = None
@@ -20,6 +21,7 @@ class InventoryItemUpdate(BaseModel):
     category: Optional[str] = None
     quantity: Optional[int] = None
     unit: Optional[str] = None
+    price: Optional[int] = None
     min_threshold: Optional[int] = None
     expiry_date: Optional[date] = None
     batch_number: Optional[str] = None

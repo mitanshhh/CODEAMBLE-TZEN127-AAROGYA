@@ -45,10 +45,10 @@ export default function BedManagement() {
 
   const fetchBeds = async () => {
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/`);
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/?hospital_id=${selectedHospitalId || ''}`);
       if (!res.ok) throw new Error("Failed to fetch beds");
       const data = await res.json();
-      setBeds(data);
+      setBeds(data.data || []);
     } catch (error) {
       console.error("Could not fetch beds data.", error);
     }
@@ -56,7 +56,7 @@ export default function BedManagement() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/analytics`);
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/analytics?hospital_id=${selectedHospitalId || ''}`);
       if (!res.ok) throw new Error("Failed to fetch analytics");
       const data = await res.json();
       setAnalytics(data);

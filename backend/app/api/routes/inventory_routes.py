@@ -3,10 +3,13 @@ from sqlalchemy.orm import Session
 from typing import List
 import pandas as pd
 import io
+from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.models.inventory import InventoryItem, InventoryLog
 from app.models.notification import Notification
+from app.models.district import ResourceRequest
+from app.models.health_centre import HealthCentre
 from app.models.user import User, UserRole
 from app.schemas.inventory import InventoryItemResponse, InventoryItemCreate, InventoryItemUpdate, InventoryLogResponse
 from app.schemas.common import PaginatedResponse
@@ -59,7 +62,7 @@ def add_inventory_item(
     item_in: InventoryItemCreate,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER]))
+    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
     item_in.hospital_id = hospital_id
     
@@ -88,12 +91,55 @@ def add_inventory_item(
     db.commit()
     return new_item
 
+@router.put("/{item_id}", response_model=InventoryItemResponse)
+def update_inventory_item(
+    item_id: int,
+    item_in: InventoryItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
+):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    old_qty = item.quantity
+    
+    for key, value in item_in.model_dump(exclude_unset=True).items():
+        setattr(item, key, value)
+        
+    if item.quantity <= item.min_threshold:
+        item.status = "Low Stock"
+    else:
+        item.status = "Normal"
+        
+    if item.quantity != old_qty:
+        diff = item.quantity - old_qty
+        log_inventory_change(db, item.id, "UPDATE" if diff > 0 else "DISPENSE", abs(diff), current_user.id, "Manual Update")
+        
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.delete("/{item_id}")
+def delete_inventory_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.MEDICAL_OFFICER]))
+):
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    db.delete(item)
+    db.commit()
+    return {"message": "Item deleted successfully"}
+
 @router.post("/upload-csv")
 async def upload_csv(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.MEDICAL_OFFICER]))
+    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
@@ -156,7 +202,7 @@ def analyze_inventory_ai(
     request: Request,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.PHARMACIST]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.PHARMACIST, UserRole.DISTRICT_ADMIN]))
 ):
     # Fetch recent logs or current stock for analysis
     items = db.query(InventoryItem).filter(InventoryItem.hospital_id == hospital_id).all()
@@ -186,3 +232,41 @@ def get_inventory_logs(
     logs = query.order_by(InventoryLog.timestamp.desc()).offset(offset).limit(limit).all()
     
     return PaginatedResponse(data=logs, total=total, limit=limit, offset=offset)
+
+class RequestCreate(BaseModel):
+    item_name: str
+    message: str
+
+@router.post("/requests")
+def submit_inventory_request(
+    request: RequestCreate,
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(get_current_user)
+):
+    phc = db.query(HealthCentre).filter(HealthCentre.id == hospital_id).first()
+    if not phc:
+        raise HTTPException(status_code=404, detail="Health centre not found")
+        
+    new_req = ResourceRequest(
+        requesting_phc_id=hospital_id,
+        target_district=phc.district,
+        resource_type="Medicine",
+        resource_name=request.item_name,
+        quantity=0, # Variable quantity could be added to schema later
+        urgency="CRITICAL",
+        status="PENDING",
+        notes=request.message
+    )
+    db.add(new_req)
+    db.commit()
+    return {"message": f"Request for {request.item_name} submitted to district admin successfully", "status": "PENDING"}
+
+@router.get("/requests")
+def get_inventory_requests(
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(get_current_user)
+):
+    requests = db.query(ResourceRequest).filter(ResourceRequest.requesting_phc_id == hospital_id).order_by(ResourceRequest.created_at.desc()).all()
+    return requests

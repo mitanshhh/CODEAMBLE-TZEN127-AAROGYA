@@ -12,6 +12,7 @@ class InventoryItem(Base):
     category = Column(String, nullable=False) # Medicine/Equipment/Consumable
     quantity = Column(Integer, default=0)
     unit = Column(String, nullable=False)
+    price = Column(Integer, default=0)
     min_threshold = Column(Integer, default=0)
     expiry_date = Column(Date, nullable=True)
     batch_number = Column(String, nullable=True)

@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
+import ReactMarkdown from 'react-markdown';
 
 // Type definitions
 interface InventoryItem {
@@ -116,6 +117,8 @@ export default function InventoryManagement() {
     status: 'Stable'
   });
   const [editFormData, setEditFormData] = useState<Partial<InventoryItem>>({});
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [selectedRequestDetails, setSelectedRequestDetails] = useState<any>(null);
 
   const fetchAllData = async () => {
     try {
@@ -125,17 +128,28 @@ export default function InventoryManagement() {
       
       const hospitalQuery = selectedHospitalId ? `&hospital_id=${selectedHospitalId}` : '';
       
+      const fetchOpts: RequestInit = { headers, cache: 'no-store' };
+      
       const [itemsRes, logsRes, requestsRes] = await Promise.all([
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/?limit=100${hospitalQuery}`, { headers }),
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/logs?limit=50${hospitalQuery}`, { headers }),
-        // Dummy requests until endpoint is ready
-        Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/?limit=100${hospitalQuery}`, fetchOpts),
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/logs?limit=50${hospitalQuery}`, fetchOpts),
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/requests?limit=100${hospitalQuery}`, fetchOpts)
       ]);
 
       if (itemsRes.ok && logsRes.ok) {
         const itemsData = await itemsRes.json();
         const logsData = await logsRes.json();
-        setItems(itemsData.data || []);
+        
+        const mappedItems = (itemsData.data || []).map((item: any) => ({
+          ...item,
+          backend_qty: item.quantity || 0,
+          total_qty: item.quantity || 0,
+          qty_sold: 0,
+          price: item.price || 0,
+          status: item.status || 'Stable'
+        }));
+        
+        setItems(mappedItems);
         setLogs(logsData.data || []);
         
         // Mock analytics data for now since backend endpoint doesn't exist
@@ -183,10 +197,23 @@ export default function InventoryManagement() {
     }
   }, [user, selectedHospitalId]);
 
+  useEffect(() => {
+    setItems(current => current.map(item => {
+      const billItem = currentBillItems.find(b => b.id === item.id);
+      const qtyInBill = billItem ? billItem.quantity : 0;
+      return {
+        ...item,
+        qty_sold: qtyInBill,
+        total_qty: ((item as any).backend_qty || 0) - qtyInBill
+      };
+    }));
+  }, [currentBillItems]);
+
   const generateAIAnalysis = async () => {
     try {
       setAiLoading(true);
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/analyze-ai`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/analyze-ai${hospitalQuery}`, {
         method: 'POST',
         headers: { 'X-Role': 'DISTRICT_ADMIN' }
       });
@@ -213,9 +240,10 @@ export default function InventoryManagement() {
   const sendRequest = async (draft: DraftRequest) => {
     try {
       const token = localStorage.getItem("token") || "mock_token";
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/requests`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/requests${hospitalQuery}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'X-Role': 'PHC_STAFF' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ item_name: draft.item_name, message: draft.draft_message })
       });
       if (res.ok) {
@@ -233,13 +261,22 @@ export default function InventoryManagement() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${hospitalQuery}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Role': 'DISTRICT_ADMIN'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          name: formData.name,
+          category: 'Medicine',
+          quantity: formData.total_qty,
+          unit: 'units',
+          price: formData.price,
+          min_threshold: formData.min_threshold,
+          status: formData.status
+        })
       });
       if (res.ok) {
         toast.success("Medicine added successfully!");
@@ -258,7 +295,8 @@ export default function InventoryManagement() {
     e.preventDefault();
     if (!selectedItem) return;
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${selectedItem.id}`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${selectedItem.id}${hospitalQuery}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -266,9 +304,9 @@ export default function InventoryManagement() {
         },
         body: JSON.stringify({
           name: editFormData.name,
-          total_qty: editFormData.total_qty,
-          min_threshold: editFormData.min_threshold,
-          price: editFormData.price
+          quantity: editFormData.total_qty,
+          price: editFormData.price,
+          min_threshold: editFormData.min_threshold
         })
       });
       if (res.ok) {
@@ -286,7 +324,8 @@ export default function InventoryManagement() {
   const handleDelete = async () => {
     if (!selectedItem) return;
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${selectedItem.id}`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${selectedItem.id}${hospitalQuery}`, {
         method: 'DELETE',
         headers: { 'X-Role': 'DISTRICT_ADMIN' }
       });
@@ -302,26 +341,17 @@ export default function InventoryManagement() {
     }
   };
 
-  const updateQuantitySold = async (item: InventoryItem, delta: number) => {
-    const newSoldQty = Math.max(0, item.qty_sold + delta);
+  const updateQuantitySold = (item: InventoryItem, delta: number) => {
+    const billItem = currentBillItems.find(b => b.id === item.id);
+    if (!billItem) {
+      if (delta > 0) addToBill(item);
+      return;
+    }
     
-    setItems(current => current.map(i => i.id === item.id ? { ...i, qty_sold: newSoldQty } : i));
-    
-    try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${item.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Role': 'DISTRICT_ADMIN'
-        },
-        body: JSON.stringify({ qty_sold: newSoldQty })
-      });
-      
-      if (!res.ok) throw new Error();
-      toast.success(`${item.name} sales updated`);
-    } catch (error) {
-      toast.error("Failed to update sales. Reverting.");
-      fetchAllData();
+    if (billItem.quantity + delta <= 0) {
+      removeFromBill(item.id);
+    } else {
+      updateBillQty(item.id, delta);
     }
   };
 
@@ -334,7 +364,8 @@ export default function InventoryManagement() {
     
     const loadingToast = toast.loading("Uploading CSV...");
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/bulk-upload`, {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/upload-csv${hospitalQuery}`, {
         method: 'POST',
         headers: { 'X-Role': 'DISTRICT_ADMIN' },
         body: formData
@@ -371,7 +402,7 @@ export default function InventoryManagement() {
     const available = item.total_qty || item.quantity || 0;
     const qty_sold = item.qty_sold || 0;
     const min_thresh = item.min_threshold || 0;
-    return (available - qty_sold) < min_thresh;
+    return (available - qty_sold) <= (min_thresh + 50);
   });
   const localRequests = criticalMeds.map(m => {
     const available = m.total_qty || m.quantity || 0;
@@ -436,7 +467,7 @@ export default function InventoryManagement() {
           <p className="text-sm text-muted-foreground mt-1">Manage stock, track distribution history, and view analytics.</p>
         </div>
         <div className="flex flex-wrap gap-3 w-full md:w-auto">
-          <Button variant="outline" onClick={() => setIsHistoryOpen(true)} className="flex-1 md:flex-none flex items-center gap-2 shadow-sm">
+          <Button variant="outline" onClick={() => setIsHistoryOpen(true)} className="flex-1 md:flex-none flex items-center gap-2 shadow-sm cursor-pointer">
             <History className="w-4 h-4" />
             View History
           </Button>
@@ -444,14 +475,14 @@ export default function InventoryManagement() {
           {/* Hidden File Input for CSV */}
           <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
           
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="flex-1 md:flex-none flex items-center gap-2 shadow-sm border-primary/50 text-primary">
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="flex-1 md:flex-none flex items-center gap-2 shadow-sm border-primary/50 text-primary cursor-pointer">
             <Upload className="w-4 h-4" />
             Upload Bulk CSV
           </Button>
           
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger render={
-              <Button className="flex-1 md:flex-none flex items-center gap-2 shadow-sm">
+              <Button className="flex-1 md:flex-none flex items-center gap-2 shadow-sm cursor-pointer">
                 <Plus className="w-4 h-4" />
                 Add Medicine
               </Button>
@@ -467,19 +498,19 @@ export default function InventoryManagement() {
                 <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label className="text-right text-sm font-medium">Name</label>
-                    <Input className="col-span-3 bg-background" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                    <Input className="col-span-3 bg-card" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label className="text-right text-sm font-medium">Total Qty</label>
-                    <Input type="number" className="col-span-3 bg-background" value={formData.total_qty} onChange={e => setFormData({...formData, total_qty: parseInt(e.target.value) || 0})} required />
+                    <Input type="number" className="col-span-3 bg-card" value={formData.total_qty} onChange={e => setFormData({...formData, total_qty: parseInt(e.target.value) || 0})} required />
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label className="text-right text-sm font-medium">Min Thresh</label>
-                    <Input type="number" className="col-span-3 bg-background" value={formData.min_threshold} onChange={e => setFormData({...formData, min_threshold: parseInt(e.target.value) || 0})} required />
+                    <Input type="number" className="col-span-3 bg-card" value={formData.min_threshold} onChange={e => setFormData({...formData, min_threshold: parseInt(e.target.value) || 0})} required />
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label className="text-right text-sm font-medium">Price (₹)</label>
-                    <Input type="number" step="0.01" className="col-span-3 bg-background" value={formData.price} onChange={e => setFormData({...formData, price: parseFloat(e.target.value) || 0})} required />
+                    <Input type="number" step="0.01" className="col-span-3 bg-card" value={formData.price} onChange={e => setFormData({...formData, price: parseFloat(e.target.value) || 0})} required />
                   </div>
                 </div>
                 <DialogFooter>
@@ -565,7 +596,7 @@ export default function InventoryManagement() {
                 <Input
                   type="search"
                   placeholder="Search medicines..."
-                  className="pl-9 h-9 w-full bg-background"
+                  className="pl-9 h-9 w-full bg-card"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -577,8 +608,9 @@ export default function InventoryManagement() {
                 <TableHeader className="bg-muted/10 sticky top-0 z-10 backdrop-blur-md">
                   <TableRow>
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Med Name</TableHead>
-                    <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-center">Qty Sold</TableHead>
+                    <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-center">Cart Qty</TableHead>
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-right">Total Qty</TableHead>
+                    <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-right">Price</TableHead>
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-right">Min Threshold</TableHead>
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-center">Status</TableHead>
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-center">Action</TableHead>
@@ -629,6 +661,7 @@ export default function InventoryManagement() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{item.total_qty}</TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">₹{item.price}</TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{item.min_threshold}</TableCell>
                         <TableCell className="text-center">
                           {getStatusBadge(item)}
@@ -637,7 +670,7 @@ export default function InventoryManagement() {
                           <Button 
                             variant="secondary" 
                             size="sm" 
-                            className="h-7 text-xs gap-1 border-primary/20 text-primary hover:bg-primary/10 w-24" 
+                            className="h-7 text-xs gap-1 border-primary/20 text-primary hover:bg-primary/10 w-24 cursor-pointer" 
                             onClick={() => addToBill(item)}
                             disabled={isOutOfStock || inBill}
                           >
@@ -678,7 +711,7 @@ export default function InventoryManagement() {
                 Current Bill
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col p-0 overflow-hidden bg-background h-[465px]">
+            <CardContent className="flex-1 flex flex-col p-0 overflow-hidden bg-card h-[465px]">
               {currentBillItems.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-muted-foreground h-full">
                   <Package className="w-8 h-8 mb-3 opacity-20" />
@@ -692,18 +725,18 @@ export default function InventoryManagement() {
                       <div className="flex-1">
                         <h4 className="font-medium text-sm text-foreground">{med.name}</h4>
                         <div className="flex items-center gap-2 mt-2">
-                          <button onClick={() => updateBillQty(med.id, -1)} className="w-6 h-6 rounded bg-background border border-border flex items-center justify-center hover:bg-muted" disabled={med.quantity <= 1}>
+                          <button onClick={() => updateBillQty(med.id, -1)} className="w-6 h-6 rounded bg-card border border-border flex items-center justify-center hover:bg-muted cursor-pointer" disabled={med.quantity <= 1}>
                             <Minus className="w-3 h-3" />
                           </button>
                           <span className="text-sm font-medium w-4 text-center">{med.quantity}</span>
-                          <button onClick={() => updateBillQty(med.id, 1)} className="w-6 h-6 rounded bg-background border border-border flex items-center justify-center hover:bg-muted" disabled={med.quantity >= med.maxQty}>
+                          <button onClick={() => updateBillQty(med.id, 1)} className="w-6 h-6 rounded bg-card border border-border flex items-center justify-center hover:bg-muted cursor-pointer" disabled={med.quantity >= med.maxQty}>
                             <Plus className="w-3 h-3" />
                           </button>
                           <span className="text-xs text-muted-foreground ml-2">₹{med.price.toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="flex flex-col items-end justify-between h-full gap-2">
-                        <button onClick={() => removeFromBill(med.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded transition-colors">
+                        <button onClick={() => removeFromBill(med.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded transition-colors cursor-pointer">
                           <Trash2 className="w-4 h-4" />
                         </button>
                         <span className="font-medium text-sm mt-1 text-foreground">₹{(med.quantity * med.price).toFixed(2)}</span>
@@ -725,7 +758,7 @@ export default function InventoryManagement() {
                   </div>
                 </div>
                 <Button 
-                  className="w-full shadow-sm" 
+                  className="w-full shadow-sm cursor-pointer" 
                   disabled={currentBillItems.length === 0} 
                   onClick={() => setIsBillingOpen(true)}
                 >
@@ -750,7 +783,7 @@ export default function InventoryManagement() {
                   AI Forecast
                 </span>
               </CardTitle>
-              <Button onClick={generateAIAnalysis} disabled={aiLoading} className="shadow-sm">
+              <Button onClick={generateAIAnalysis} disabled={aiLoading} className="shadow-sm cursor-pointer">
                 {aiLoading ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing Stock...</>
                 ) : (
@@ -780,8 +813,8 @@ export default function InventoryManagement() {
                   </div>
                 )}
                 {aiAnalysis && !aiLoading && (
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                    {aiAnalysis.insights}
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed">
+                    <ReactMarkdown>{aiAnalysis.insights}</ReactMarkdown>
                   </div>
                 )}
               </div>
@@ -790,7 +823,7 @@ export default function InventoryManagement() {
               <div className="space-y-4 h-[500px] flex flex-col">
                 <h3 className="font-semibold text-foreground flex items-center gap-2 shrink-0">
                   <TrendingDown className="w-4 h-4 text-red-500" />
-                  Critical Stock Alerts (Auto-Detected)
+                  Critical Stock Alerts
                 </h3>
                 {localRequests.length === 0 ? (
                   <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg flex items-center gap-3">
@@ -800,20 +833,22 @@ export default function InventoryManagement() {
                 ) : (
                   <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
                     {localRequests.map((draft, idx) => {
-                      const existingReq = requests.find(r => r.item_name === draft.item_name);
+                      const relatedReqs = requests.filter(r => r.resource_name === draft.item_name);
+                      const existingReq = relatedReqs.find(r => r.status === 'APPROVED') || relatedReqs[0];
                       const isLocked = !!existingReq;
+                      const isNoteExpanded = expandedNotes[draft.item_name] || false;
                       
                       return (
                         <div key={idx} className="bg-card border border-destructive/20 rounded-xl p-4 shadow-sm relative overflow-hidden group h-[200px] flex flex-col">
                           {isLocked && (
-                            <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center border border-border">
-                              <Badge variant={existingReq.status === 'APPROVED' ? 'default' : existingReq.status === 'REJECTED' ? 'destructive' : 'secondary'} className="mb-2 uppercase">
+                            <div 
+                              className="absolute inset-0 bg-background/20 backdrop-blur-sm z-10 flex flex-col items-center justify-center border border-border cursor-pointer hover:bg-background/30 transition-colors"
+                              onClick={() => setSelectedRequestDetails(existingReq)}
+                            >
+                              <Badge variant={existingReq.status === 'APPROVED' ? 'default' : existingReq.status === 'REJECTED' ? 'destructive' : 'secondary'} className="uppercase px-4 py-1 text-sm shadow-md">
                                 {existingReq.status}
                               </Badge>
-                              <p className="text-sm font-medium text-foreground bg-background px-3 py-1 rounded-full shadow-sm border border-border">
-                                {existingReq.status === 'PENDING' ? "Request sent for approval" : 
-                                 existingReq.status === 'APPROVED' ? "Restock Approved!" : "Request Rejected."}
-                              </p>
+                              <p className="text-xs text-foreground/80 mt-2 font-medium bg-background/50 px-2 py-1 rounded-md shadow-sm border border-border/50">Click here to see more details</p>
                             </div>
                           )}
                           
@@ -851,24 +886,24 @@ export default function InventoryManagement() {
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
                 <label className="text-right text-sm font-medium">Name</label>
-                <Input className="col-span-3 bg-background" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} required />
+                <Input className="col-span-3 bg-card" value={editFormData.name || ''} onChange={e => setEditFormData({...editFormData, name: e.target.value})} required />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <label className="text-right text-sm font-medium">Total Qty</label>
-                <Input type="number" className="col-span-3 bg-background" value={editFormData.total_qty ?? 0} onChange={e => setEditFormData({...editFormData, total_qty: parseInt(e.target.value) || 0})} required />
+                <Input type="number" className="col-span-3 bg-card" value={editFormData.total_qty ?? 0} onChange={e => setEditFormData({...editFormData, total_qty: parseInt(e.target.value) || 0})} required />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <label className="text-right text-sm font-medium">Min Thresh</label>
-                <Input type="number" className="col-span-3 bg-background" value={editFormData.min_threshold ?? 0} onChange={e => setEditFormData({...editFormData, min_threshold: parseInt(e.target.value) || 0})} required />
+                <Input type="number" className="col-span-3 bg-card" value={editFormData.min_threshold ?? 0} onChange={e => setEditFormData({...editFormData, min_threshold: parseInt(e.target.value) || 0})} required />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <label className="text-right text-sm font-medium">Price (₹)</label>
-                <Input type="number" step="0.01" className="col-span-3 bg-background" value={editFormData.price ?? 0} onChange={e => setEditFormData({...editFormData, price: parseFloat(e.target.value) || 0})} required />
+                <Input type="number" step="0.01" className="col-span-3 bg-card" value={editFormData.price ?? 0} onChange={e => setEditFormData({...editFormData, price: parseFloat(e.target.value) || 0})} required />
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-              <Button type="submit">Save Changes</Button>
+              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} className="cursor-pointer">Cancel</Button>
+              <Button type="submit" className="cursor-pointer">Save Changes</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -884,8 +919,8 @@ export default function InventoryManagement() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4 gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
-            <Button type="button" variant="destructive" onClick={handleDelete}>Delete</Button>
+            <Button type="button" variant="outline" onClick={() => setIsDeleteOpen(false)} className="cursor-pointer">Cancel</Button>
+            <Button type="button" variant="destructive" onClick={handleDelete} className="cursor-pointer">Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -942,6 +977,63 @@ export default function InventoryManagement() {
         hospitalName={hospitalName} 
         onSuccess={() => { setCurrentBillItems([]); fetchAllData(); }}
       />
+
+      <Dialog open={!!selectedRequestDetails} onOpenChange={(open) => !open && setSelectedRequestDetails(null)}>
+        <DialogContent className="sm:max-w-[425px] bg-card border border-border">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Package className="w-5 h-5 text-primary" />
+              Request Details
+            </DialogTitle>
+            <DialogDescription>
+              Information about your emergency restock request.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRequestDetails && (
+            <div className="space-y-4 mt-2">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <span className="text-sm text-muted-foreground">Medicine</span>
+                <span className="font-semibold text-foreground">{selectedRequestDetails.resource_name}</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge variant={selectedRequestDetails.status === 'APPROVED' ? 'default' : selectedRequestDetails.status === 'REJECTED' ? 'destructive' : 'secondary'} className="uppercase">
+                  {selectedRequestDetails.status}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <span className="text-sm text-muted-foreground">Requested On</span>
+                <span className="text-sm text-foreground">
+                  {new Date(selectedRequestDetails.created_at).toLocaleString()}
+                </span>
+              </div>
+              {selectedRequestDetails.updated_at && (
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <span className="text-sm text-muted-foreground">Actioned On</span>
+                  <span className="text-sm text-foreground">
+                    {new Date(selectedRequestDetails.updated_at).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              <div className="space-y-1">
+                <span className="text-sm text-muted-foreground block">Original Ask</span>
+                <p className="text-sm text-foreground bg-muted/30 p-2 rounded-md border border-border">
+                  {selectedRequestDetails.notes || 'No notes provided.'}
+                </p>
+              </div>
+              <div className="space-y-1 mt-2">
+                <span className="text-sm text-muted-foreground block">Admin Notes</span>
+                <p className="text-sm text-foreground bg-muted/30 p-2 rounded-md border border-border whitespace-pre-wrap">
+                  {selectedRequestDetails.admin_note || 'No administrative notes yet.'}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setSelectedRequestDetails(null)} className="w-full">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

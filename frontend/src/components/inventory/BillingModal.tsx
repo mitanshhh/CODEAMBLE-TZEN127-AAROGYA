@@ -53,14 +53,23 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
     try {
       // 1. Update inventory for each selected medicine
       for (const med of selectedMedicines) {
-        const newSoldQty = med.originalQtySold + med.quantity;
-        const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${med.id}`, {
+        // med.maxQty holds the original available quantity. med.quantity is the amount sold.
+        const newTotalQty = Math.max(0, med.maxQty - med.quantity);
+        
+        // Pass X-Hospital-ID header to satisfy backend auth requirements for DISTRICT_ADMIN
+        const hospitalId = localStorage.getItem('selectedHospitalId');
+        const headers: any = {
+          'Content-Type': 'application/json',
+          'X-Role': 'DISTRICT_ADMIN'
+        };
+        if (hospitalId) headers['X-Hospital-ID'] = hospitalId;
+        
+        const hospitalQuery = hospitalId ? `?hospital_id=${hospitalId}` : '';
+
+        const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${med.id}${hospitalQuery}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Role': 'DISTRICT_ADMIN' // Use appropriate role or token
-          },
-          body: JSON.stringify({ qty_sold: newSoldQty })
+          headers,
+          body: JSON.stringify({ quantity: newTotalQty })
         });
 
         if (!res.ok) {

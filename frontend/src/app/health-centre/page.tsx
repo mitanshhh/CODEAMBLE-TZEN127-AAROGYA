@@ -149,7 +149,17 @@ export default function HealthCentreManagement() {
           'Content-Type': 'application/json',
           'X-Role': 'DISTRICT_ADMIN'
         },
-        body: JSON.stringify(editFormData)
+        body: JSON.stringify({
+          name: editFormData.name,
+          type: editFormData.type,
+          total_beds: editFormData.total_beds,
+          available_beds: editFormData.available_beds,
+          total_staff: editFormData.total_staff,
+          latitude: editFormData.latitude,
+          longitude: editFormData.longitude,
+          contact_number: editFormData.contact_number,
+          email: editFormData.email || null
+        })
       });
       
       if (res.ok) {

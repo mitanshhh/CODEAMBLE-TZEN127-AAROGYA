@@ -103,7 +103,7 @@ def scan_qr_attendance(
 def get_attendance_dashboard(
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
 ):
     today = date.today()
     session = db.query(DailyQRSession).filter(

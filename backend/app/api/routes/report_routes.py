@@ -16,6 +16,27 @@ from fastapi import Request
 
 router = APIRouter()
 
+@router.get("/")
+def get_reports(
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
+):
+    reports = db.query(Report).filter(Report.hospital_id == hospital_id).order_by(Report.created_at.desc()).all()
+    
+    result = []
+    for r in reports:
+        result.append({
+            "id": r.id,
+            "month_year": r.month_year,
+            "health_score": r.health_score,
+            "ai_insights": r.ai_insights_json,
+            "created_at": r.created_at,
+            "risk_level": "Critical" if r.health_score < 50 else ("Moderate" if r.health_score < 75 else "Good")
+        })
+    return result
+
+
 @router.post("/generate-pdf")
 @limiter.limit("10/minute")
 def trigger_report_generation(
@@ -24,10 +45,24 @@ def trigger_report_generation(
     hospital_id: int = Depends(resolve_hospital_id),
     current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
 ):
+    from app.models.health_centre import HealthCentre
+    from app.models.attendance import Doctor, DailyQRSession, AttendanceRecord
+    
     month_year = date.today().strftime("%m-%Y")
     score = calculate_health_score(db, hospital_id)
     
-    insights_str = "Report generated successfully. Bed capacity is stable."
+    hc = db.query(HealthCentre).filter(HealthCentre.id == hospital_id).first()
+    
+    # Calculate Attendance
+    today = date.today()
+    session = db.query(DailyQRSession).filter(DailyQRSession.hospital_id == hospital_id, DailyQRSession.date == today).first()
+    total_docs = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).count()
+    present_docs = db.query(AttendanceRecord).filter(AttendanceRecord.session_id == session.id).count() if session else 0
+    
+    insights_str = f"Facility: {hc.name}\n"
+    insights_str += f"Bed Capacity: {hc.available_beds}/{hc.total_beds} available.\n"
+    insights_str += f"Doctor Attendance Today: {present_docs}/{total_docs} present.\n"
+    insights_str += f"Overall AI Health Score implies {'critical attention needed' if score < 50 else 'stable operations'}."
     
     filepath = generate_monthly_report(hospital_id, month_year, score, insights_str)
     

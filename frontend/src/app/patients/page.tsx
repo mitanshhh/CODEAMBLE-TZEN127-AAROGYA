@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PatientAnalyticsCards } from "@/components/patients/PatientAnalyticsCards";
 import { PatientForm } from "@/components/patients/PatientForm";
 
@@ -23,6 +24,7 @@ export default function PatientsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedActionPatient, setSelectedActionPatient] = useState<any>(null);
   const [role, setRole] = useState("DEVELOPER");
   
   // Will be fetched from backend
@@ -30,22 +32,23 @@ export default function PatientsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
       // Fetch patients
-      const pRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/`);
+      const pRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/${hospitalQuery}`);
       if (pRes.ok) {
         const pData = await pRes.json();
-        setPatients(pData);
+        setPatients(pData.data || []);
       }
       
       // Fetch analytics
-      const aRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/analytics`);
+      const aRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/analytics${hospitalQuery}`);
       if (aRes.ok) {
         const aData = await aRes.json();
         setAnalytics(aData);
       }
       
       // Fetch doctors
-      const dRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/doctors`);
+      const dRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/doctors${hospitalQuery}`);
       if (dRes.ok) {
         const dData = await dRes.json();
         setDoctors(dData);
@@ -222,16 +225,16 @@ export default function PatientsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {p.status === "Waiting" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Under Consultation")} className="mr-2 text-xs h-8 text-blue-600 hover:text-blue-700">
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Under Consultation")} className="mr-2 text-xs h-8 text-blue-600 hover:text-blue-700 cursor-pointer hover:bg-muted">
                           Consult
                         </Button>
                       )}
                       {p.status === "Under Consultation" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Completed")} className="mr-2 text-xs h-8 text-emerald-600 hover:text-emerald-700">
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Completed")} className="mr-2 text-xs h-8 text-emerald-600 hover:text-emerald-700 cursor-pointer hover:bg-muted">
                           Complete
                         </Button>
                       )}
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button size="sm" variant="ghost" onClick={() => setSelectedActionPatient(p)} className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-muted">
                         <ChevronRight className="w-4 h-4" />
                       </Button>
                     </TableCell>
@@ -247,16 +250,28 @@ export default function PatientsPage() {
         <SheetContent side="right" className="w-full md:w-[600px] sm:max-w-none p-0 border-l border-border bg-background">
           <PatientForm 
             onSubmit={handleRegisterPatient} 
-            onClose={() => setIsFormOpen(false)} 
+            onClose={() => setIsFormOpen(false)}
             doctors={doctors}
           />
         </SheetContent>
       </Sheet>
 
+      <Dialog open={!!selectedActionPatient} onOpenChange={(open) => !open && setSelectedActionPatient(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Patient Actions</DialogTitle>
+            <DialogDescription>
+              Placeholder for patient actions (Edit, View Details, History) for PT-{selectedActionPatient?.id?.toString().padStart(4, '0')} - {selectedActionPatient?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-center text-sm text-muted-foreground border-y border-border my-4">
+            Detailed patient actions modal is not yet implemented.
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setSelectedActionPatient(null)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-
-
-

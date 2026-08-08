@@ -22,7 +22,8 @@ export default function DoctorDashboard() {
     try {
       setLoading(true);
       
-      const docsRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/doctors`);
+      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const docsRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/doctors${hospitalQuery}`);
       if (!docsRes.ok) throw new Error("Failed to fetch doctors");
       const docs = await docsRes.json();
       
@@ -39,7 +40,8 @@ export default function DoctorDashboard() {
       const currentDocId = myDoc.id;
       setDocId(currentDocId);
       
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/doctor/dashboard?doctor_id=${currentDocId}`);
+      const hospitalQueryParam = selectedHospitalId ? `&hospital_id=${selectedHospitalId}` : '';
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/doctor/dashboard?doctor_id=${currentDocId}${hospitalQueryParam}`);
       if (res.ok) {
         setData(await res.json());
       } else {
