@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 import uuid
 
 from app.db.database import get_db
-from app.models.attendance import DailyQRSession, AttendanceRecord, Doctor
+from app.models.attendance import DailyQRSession, AttendanceRecord, Doctor, RandomAttendanceCheck
 from app.models.user import User, UserRole
 from app.schemas.attendance import DailyQRSessionResponse, AttendanceRecordResponse
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
+from app.core.scheduler import schedule_random_check
 
 router = APIRouter()
 
@@ -24,6 +25,10 @@ def generate_qr_session(
     ).first()
     
     if existing_session:
+        existing_session.qr_token = str(uuid.uuid4())
+        existing_session.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(existing_session)
         return existing_session
         
     new_token = str(uuid.uuid4())
@@ -48,11 +53,29 @@ def scan_qr_attendance(
     session = db.query(DailyQRSession).filter(DailyQRSession.qr_token == qr_token, DailyQRSession.is_active == True).first()
     if not session:
         raise HTTPException(status_code=400, detail="Invalid or expired QR token")
+        
+    # Enforce 5-minute QR validity
+    updated_at_aware = session.updated_at.replace(tzinfo=timezone.utc) if session.updated_at.tzinfo is None else session.updated_at
+    if datetime.now(timezone.utc) - updated_at_aware > timedelta(minutes=5):
+        raise HTTPException(status_code=400, detail="QR code has expired. Please ask the Medical Officer to refresh it.")
     
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id, Doctor.hospital_id == session.hospital_id).first()
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found in this hospital")
         
+    # 1. Check if this is a random verification response
+    pending_check = db.query(RandomAttendanceCheck).filter(
+        RandomAttendanceCheck.doctor_id == doctor_id,
+        RandomAttendanceCheck.session_id == session.id,
+        RandomAttendanceCheck.status == "PENDING"
+    ).first()
+    
+    if pending_check:
+        pending_check.status = "COMPLETED"
+        db.commit()
+        return {"message": "Random verification completed successfully"}
+        
+    # 2. Otherwise, standard morning check-in
     existing_record = db.query(AttendanceRecord).filter(
         AttendanceRecord.session_id == session.id,
         AttendanceRecord.doctor_id == doctor_id
@@ -69,6 +92,10 @@ def scan_qr_attendance(
     )
     db.add(record)
     db.commit()
+    db.refresh(record)
+    
+    # Schedule random check for later today
+    schedule_random_check(doctor_id, session.id)
     
     return {"message": "Attendance recorded successfully"}
 

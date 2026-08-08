@@ -11,7 +11,7 @@ class PatientBase(BaseModel):
     medical_history: Optional[str] = None
 
 class PatientCreate(PatientBase):
-    hospital_id: int
+    hospital_id: Optional[int] = None
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None

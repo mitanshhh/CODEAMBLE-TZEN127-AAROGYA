@@ -13,6 +13,7 @@ class Doctor(Base):
     phone = Column(String, nullable=True)
     email = Column(String, nullable=True)
     shift = Column(String, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     attendance_records = relationship("AttendanceRecord", back_populates="doctor")
 
@@ -26,6 +27,7 @@ class DailyQRSession(Base):
     qr_token = Column(String, unique=True, nullable=False, index=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     records = relationship("AttendanceRecord", back_populates="session")
 
@@ -42,3 +44,16 @@ class AttendanceRecord(Base):
 
     doctor = relationship("Doctor", back_populates="attendance_records")
     session = relationship("DailyQRSession", back_populates="records")
+
+class RandomAttendanceCheck(Base):
+    __tablename__ = "random_attendance_checks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False, index=True)
+    session_id = Column(Integer, ForeignKey("daily_qr_sessions.id"), nullable=False, index=True)
+    issued_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    status = Column(String, default="PENDING", index=True) # PENDING, COMPLETED, MISSED
+
+    doctor = relationship("Doctor")
+    session = relationship("DailyQRSession")

@@ -67,7 +67,8 @@ def add_inventory_item(
     if item_in.quantity <= item_in.min_threshold:
         status = "Low Stock"
         
-    new_item = InventoryItem(**item_in.model_dump(), status=status)
+    item_dict = item_in.model_dump(exclude={"status"})
+    new_item = InventoryItem(**item_dict, status=status)
     db.add(new_item)
     db.flush()
     

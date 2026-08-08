@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build', 
+    '-t', 'asia-south1-docker.pkg.dev/aarogya-501716/aarogya/frontend:latest',
+    '--build-arg', 'NEXT_PUBLIC_API_URL=$_API_URL',
+    '--build-arg', 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$_MAPS_API_KEY',
+    '.'
+  ]
+images:
+- 'asia-south1-docker.pkg.dev/aarogya-501716/aarogya/frontend:latest'
