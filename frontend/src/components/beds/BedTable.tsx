@@ -8,7 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Search, UserPlus, FileMinus } from "lucide-react";
 import { BedDetailDrawer } from "./BedDetailDrawer";
 
-export function BedTable({ beds, onAdmit, onDischarge, onStatusChange }: { beds: any[], onAdmit: any, onDischarge: any, onStatusChange: any }) {
+interface BedTableProps {
+  beds: any[];
+  onAdmit: (bedId: number, patientName: string, phone: string, reason: string, days: number, action: string) => void;
+  onDischarge: (bedId: number) => void;
+  onStatusChange: (bedId: number, status: string) => void;
+  onEdit?: (bed: any) => void;
+}
+
+export function BedTable({ beds, onAdmit, onDischarge, onStatusChange, onEdit }: BedTableProps) {
   const [search, setSearch] = useState("");
   const [selectedBed, setSelectedBed] = useState<any>(null);
   
@@ -76,6 +84,11 @@ export function BedTable({ beds, onAdmit, onDischarge, onStatusChange }: { beds:
                   {bed.admission_time ? new Date(bed.admission_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : "--"}
                 </TableCell>
                 <TableCell className="text-right space-x-2">
+                  {onEdit && (
+                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onEdit(bed); }}>
+                      Edit
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedBed(bed); }}>
                     Details
                   </Button>

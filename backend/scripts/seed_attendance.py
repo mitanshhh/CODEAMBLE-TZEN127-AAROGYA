@@ -13,7 +13,7 @@ from app.models.attendance import Doctor, DailyQRSession, AttendanceRecord
 def seed_attendance():
     db = SessionLocal()
     try:
-        hospital_id = 2  # Targeting the default PHC North
+        hospital_id = 1  # Targeting Alpha PHC
         
         # 1. Create a DailyQRSession for today
         today = date.today()

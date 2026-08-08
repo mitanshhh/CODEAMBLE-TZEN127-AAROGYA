@@ -161,7 +161,7 @@ def get_attendance_records(
             
         results.append({
             "id": doc.id,
-            "doctor_name": doc.user.username if doc.user else f"Doctor {doc.id}",
+            "doctor_name": doc.name or (doc.user.username if doc.user else f"Doctor {doc.id}"),
             "specialization": doc.specialization or "General",
             "status": doc_status,
             "timestamp": timestamp,

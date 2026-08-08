@@ -24,6 +24,7 @@ export function Header({ setIsMobileOpen }: HeaderProps) {
   
   const [hospitals, setHospitals] = useState<Record<string, unknown>[]>([]);
   const [hospitalSearch, setHospitalSearch] = useState('');
+  const [backendDown, setBackendDown] = useState(false);
 
   const filteredHospitals = hospitals.filter(h => 
     String(h.name).toLowerCase().includes(hospitalSearch.toLowerCase())
@@ -39,8 +40,12 @@ export function Header({ setIsMobileOpen }: HeaderProps) {
         const data = await res.json();
         setNotifications(data);
         setUnreadCount(data.filter((n: Record<string, unknown>) => !n.is_read).length);
+        setBackendDown(false);
       }
-    } catch(e) { console.error(e); }
+    } catch(e) {
+      // Silently handle backend connection failures (e.g. server not started)
+      setBackendDown(true);
+    }
   };
 
   const fetchHospitals = async () => {
@@ -55,14 +60,21 @@ export function Header({ setIsMobileOpen }: HeaderProps) {
         if (!selectedHospitalId && data.length > 0) {
           setSelectedHospitalId(data[0].id as number);
         }
+        setBackendDown(false);
       }
-    } catch(e) { console.error(e); }
+    } catch(e) {
+      // Silently handle backend connection failures
+      setBackendDown(true);
+    }
   };
 
   useEffect(() => {
     fetchNotifications();
     fetchHospitals();
-    const interval = setInterval(fetchNotifications, 10000);
+    // Poll every 30s (was 10s) — reduces noise when backend is down
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 30000);
     return () => clearInterval(interval);
   }, [token, user]);
 
@@ -163,32 +175,6 @@ export function Header({ setIsMobileOpen }: HeaderProps) {
       </div>
       
       <div className="flex items-center gap-2 md:gap-3">
-        {/* Language Switcher */}
-        <DropdownMenu>
-          <DropdownMenuTrigger className="relative flex items-center justify-center focus:outline-none text-muted-foreground rounded-full hover:bg-muted/80 hover:text-foreground hover:shadow-sm transition-all h-9 px-2.5 gap-1.5 border border-transparent hover:border-border">
-            {isTranslating ? (
-              <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            ) : (
-              <Globe className="w-4 h-4" />
-            )}
-            <span className="text-xs font-bold tracking-wide">{LOCALE_LABELS[locale].native}</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44 rounded-xl p-1.5 shadow-xl border-border bg-card/95 backdrop-blur-md">
-            {(Object.keys(LOCALE_LABELS) as Locale[]).map((loc) => (
-              <DropdownMenuItem
-                key={loc}
-                onClick={() => setLocale(loc)}
-                className={`flex items-center justify-between cursor-pointer rounded-lg px-3 py-2.5 mb-0.5 transition-colors ${locale === loc ? 'bg-primary/10 text-primary font-semibold' : ''}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base font-bold w-7 text-center">{LOCALE_LABELS[loc].native}</span>
-                  <span className="text-sm">{LOCALE_LABELS[loc].label}</span>
-                </div>
-                {locale === loc && <Check className="w-4 h-4 shrink-0" />}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
 
         {/* Notifications */}
         <DropdownMenu>

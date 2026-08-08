@@ -13,6 +13,13 @@ class HealthCentreBase(BaseModel):
     longitude: Optional[float] = None
     contact_number: Optional[str] = None
     email: Optional[EmailStr] = None
+    medical_officer: Optional[str] = None
+    phc_id: Optional[str] = None
+    admin_email: Optional[EmailStr] = None
+    admin_mobile: Optional[str] = None
+    location: Optional[str] = None
+    health_score: Optional[int] = 100
+    status: Optional[str] = "Active"
 
 class HealthCentreUpdate(BaseModel):
     name: Optional[str] = None
@@ -24,6 +31,13 @@ class HealthCentreUpdate(BaseModel):
     longitude: Optional[float] = None
     contact_number: Optional[str] = None
     email: Optional[EmailStr] = None
+    medical_officer: Optional[str] = None
+    phc_id: Optional[str] = None
+    admin_email: Optional[EmailStr] = None
+    admin_mobile: Optional[str] = None
+    location: Optional[str] = None
+    health_score: Optional[int] = None
+    status: Optional[str] = None
 
 class HealthCentreResponse(HealthCentreBase):
     id: int

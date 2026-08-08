@@ -120,7 +120,11 @@ export default function HealthCentreManagement() {
           'Content-Type': 'application/json',
           'X-Role': 'DISTRICT_ADMIN'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          district: formData.location || "North District",
+          state: "Maharashtra"
+        })
       });
       
       if (res.ok) {
@@ -130,7 +134,13 @@ export default function HealthCentreManagement() {
         fetchCentres();
       } else {
         const errorData = await res.json();
-        toast.error(errorData.detail || "Failed to register Health Centre");
+        let errorMsg = "Failed to register Health Centre";
+        if (typeof errorData.detail === 'string') {
+          errorMsg = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          errorMsg = errorData.detail.map((e: any) => `${e.loc?.join('.')} ${e.msg}`).join(', ');
+        }
+        toast.error(errorMsg);
       }
     } catch (error) {
       toast.error("Network error");
@@ -158,7 +168,12 @@ export default function HealthCentreManagement() {
           latitude: editFormData.latitude,
           longitude: editFormData.longitude,
           contact_number: editFormData.contact_number,
-          email: editFormData.email || null
+          email: editFormData.email || null,
+          medical_officer: editFormData.medical_officer,
+          location: editFormData.location,
+          status: editFormData.status,
+          district: editFormData.location || "North District",
+          state: "Maharashtra"
         })
       });
       

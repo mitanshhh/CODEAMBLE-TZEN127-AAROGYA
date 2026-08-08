@@ -5,10 +5,11 @@ from app.db.database import get_db
 from app.models.bed import Bed
 from app.models.patient import Patient, PatientAuditLog
 from app.models.user import User, UserRole
-from app.schemas.bed import BedResponse
+from app.schemas.bed import BedResponse, BedCreate, BedUpdate
 from app.schemas.common import PaginatedResponse
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
-
+from pydantic import BaseModel
+from typing import Optional
 router = APIRouter()
 
 def log_audit(db: Session, patient_id: int, user_id: int, action: str, details: str = None):
@@ -42,6 +43,41 @@ def get_beds(
         limit=limit,
         offset=offset
     )
+
+@router.post("/", response_model=BedResponse)
+def create_bed(
+    bed_in: BedCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+):
+    # If not district admin, can only create bed in their own hospital
+    if current_user.role != UserRole.DISTRICT_ADMIN and current_user.hospital_id != bed_in.hospital_id:
+        raise HTTPException(status_code=403, detail="Not authorized to create beds for this hospital")
+        
+    db_bed = Bed(**bed_in.model_dump())
+    db.add(db_bed)
+    db.commit()
+    db.refresh(db_bed)
+    return db_bed
+
+@router.put("/{bed_id}", response_model=BedResponse)
+def update_bed(
+    bed_id: int,
+    bed_in: BedUpdate,
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+):
+    bed = db.query(Bed).filter(Bed.id == bed_id, Bed.hospital_id == hospital_id).first()
+    if not bed:
+        raise HTTPException(status_code=404, detail="Bed not found")
+        
+    for key, value in bed_in.model_dump(exclude_unset=True).items():
+        setattr(bed, key, value)
+        
+    db.commit()
+    db.refresh(bed)
+    return bed
 
 @router.get("/analytics")
 def get_bed_analytics(
@@ -81,60 +117,96 @@ def get_bed_analytics(
     }
 
 
-@router.post("/admit")
+class AdmitPayload(BaseModel):
+    action: str
+    patient_name: str
+    patient_phone: Optional[str] = None
+    admission_reason: Optional[str] = None
+    doctor_id: Optional[int] = None
+    expected_discharge: Optional[datetime] = None
+
+@router.post("/{bed_id}/admit")
 def admit_patient(
-    bed_id: int = Query(...),
-    patient_id: int = Query(...),
+    bed_id: int,
+    payload: AdmitPayload,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.RECEPTIONIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER]))
+    current_user: User = Depends(require_role([UserRole.RECEPTIONIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     bed = db.query(Bed).filter(Bed.id == bed_id, Bed.hospital_id == hospital_id).first()
-    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.hospital_id == hospital_id).first()
     
     if not bed:
         raise HTTPException(status_code=404, detail="Bed not found")
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
     if bed.status != "Available":
         raise HTTPException(status_code=400, detail="Bed is not available")
-    if patient.status == "Admitted":
-        raise HTTPException(status_code=400, detail="Patient is already admitted")
+    
+    # Create a new patient record since the frontend sends patient details
+    new_patient = Patient(
+        hospital_id=hospital_id,
+        name=payload.patient_name,
+        contact=payload.patient_phone,
+        medical_history=payload.admission_reason,
+        status="Admitted",
+        age=0,
+        gender="Unknown"
+    )
+    db.add(new_patient)
+    db.commit()
+    db.refresh(new_patient)
     
     bed.status = "Occupied"
-    bed.patient_id = patient.id
+    bed.patient_id = new_patient.id
     bed.admitted_at = datetime.now(timezone.utc)
     
-    patient.status = "Admitted"
-    
-    log_audit(db, patient.id, current_user.id, "EDIT", f"Admitted to bed {bed.bed_number}")
+    log_audit(db, new_patient.id, current_user.id, "CREATE", f"Admitted to bed {bed.bed_number}")
     db.commit()
     db.refresh(bed)
     return bed
 
-@router.post("/discharge")
+@router.post("/{bed_id}/discharge")
 def discharge_patient(
-    patient_id: int = Query(...),
+    bed_id: int,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.RECEPTIONIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER]))
+    current_user: User = Depends(require_role([UserRole.RECEPTIONIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
-    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.hospital_id == hospital_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    if patient.status != "Admitted":
-        raise HTTPException(status_code=400, detail="Patient is not admitted")
+    bed = db.query(Bed).filter(Bed.id == bed_id, Bed.hospital_id == hospital_id).first()
+    if not bed:
+        raise HTTPException(status_code=404, detail="Bed not found")
+    if not bed.patient_id:
+        raise HTTPException(status_code=400, detail="Bed is not occupied")
+        
+    patient = db.query(Patient).filter(Patient.id == bed.patient_id).first()
     
-    bed = db.query(Bed).filter(Bed.patient_id == patient.id, Bed.hospital_id == hospital_id).first()
-    if bed:
-        bed.status = "Available"
-        bed.patient_id = None
-        bed.admitted_at = None
+    bed.status = "Cleaning"
+    bed.patient_id = None
+    bed.admitted_at = None
     
-    patient.status = "Discharged"
-    patient.discharged_at = datetime.now(timezone.utc)
+    if patient:
+        patient.status = "Discharged"
+        patient.discharged_at = datetime.now(timezone.utc)
+        log_audit(db, patient.id, current_user.id, "EDIT", "Discharged patient")
     
-    log_audit(db, patient.id, current_user.id, "EDIT", "Discharged patient")
     db.commit()
     
     return {"message": "Patient discharged successfully"}
+
+class StatusPayload(BaseModel):
+    status: str
+
+@router.put("/{bed_id}/status")
+def change_bed_status(
+    bed_id: int,
+    payload: StatusPayload,
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(require_role([UserRole.RECEPTIONIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
+):
+    bed = db.query(Bed).filter(Bed.id == bed_id, Bed.hospital_id == hospital_id).first()
+    if not bed:
+        raise HTTPException(status_code=404, detail="Bed not found")
+        
+    bed.status = payload.status
+    db.commit()
+    db.refresh(bed)
+    return bed

@@ -17,7 +17,7 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/beds":           ["DISTRICT_ADMIN", "MEDICAL_OFFICER", "DATA_ENTRY", "RECEPTIONIST", "DEVELOPER"],
   "/analytics":      ["DISTRICT_ADMIN", "MEDICAL_OFFICER", "DEVELOPER"],
   "/ai-audit":       ["DISTRICT_ADMIN", "MEDICAL_OFFICER", "DEVELOPER"],
-  "/manage-roles":   ["DISTRICT_ADMIN", "DEVELOPER"],
+  "/manage-roles":   ["DEVELOPER"],
   "/phc":            ["DISTRICT_ADMIN", "MEDICAL_OFFICER", "DEVELOPER"],
   "/reports":        ["DISTRICT_ADMIN", "MEDICAL_OFFICER", "DEVELOPER"],
 };

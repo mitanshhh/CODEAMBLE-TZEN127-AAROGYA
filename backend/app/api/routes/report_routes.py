@@ -53,24 +53,49 @@ def trigger_report_generation(
     
     hc = db.query(HealthCentre).filter(HealthCentre.id == hospital_id).first()
     
+    from app.models.inventory import InventoryItem
+    from app.models.patient import Patient
+    from app.models.bed import Bed
+
     # Calculate Attendance
     today = date.today()
     session = db.query(DailyQRSession).filter(DailyQRSession.hospital_id == hospital_id, DailyQRSession.date == today).first()
     total_docs = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).count()
     present_docs = db.query(AttendanceRecord).filter(AttendanceRecord.session_id == session.id).count() if session else 0
     
-    insights_str = f"Facility: {hc.name}\n"
-    insights_str += f"Bed Capacity: {hc.available_beds}/{hc.total_beds} available.\n"
-    insights_str += f"Doctor Attendance Today: {present_docs}/{total_docs} present.\n"
-    insights_str += f"Overall AI Health Score implies {'critical attention needed' if score < 50 else 'stable operations'}."
+    # Calculate Inventory
+    low_stock_items = db.query(InventoryItem).filter(InventoryItem.hospital_id == hospital_id, InventoryItem.status == 'Low Stock').count()
+    out_of_stock = db.query(InventoryItem).filter(InventoryItem.hospital_id == hospital_id, InventoryItem.quantity == 0).count()
     
-    filepath = generate_monthly_report(hospital_id, month_year, score, insights_str)
+    # Calculate Patients
+    total_patients_today = db.query(Patient).filter(Patient.hospital_id == hospital_id).count() # simplistic proxy for today
+    waiting_patients = db.query(Patient).filter(Patient.hospital_id == hospital_id, Patient.status == 'Waiting').count()
+    
+    # Calculate Beds
+    total_beds = db.query(Bed).filter(Bed.hospital_id == hospital_id).count()
+    occupied_beds = db.query(Bed).filter(Bed.hospital_id == hospital_id, Bed.status == 'Occupied').count()
+    
+    metrics = {
+        "hospital_name": hc.name,
+        "date": today.strftime('%d %B %Y'),
+        "total_docs": total_docs,
+        "present_docs": present_docs,
+        "low_stock_items": low_stock_items,
+        "out_of_stock": out_of_stock,
+        "total_patients": total_patients_today,
+        "waiting_patients": waiting_patients,
+        "total_beds": total_beds,
+        "occupied_beds": occupied_beds,
+        "total_medicines": db.query(InventoryItem).filter(InventoryItem.hospital_id == hospital_id).count()
+    }
+    
+    filepath = generate_monthly_report(hospital_id, month_year, score, metrics)
     
     db_report = Report(
         hospital_id=hospital_id,
         month_year=month_year,
         health_score=score,
-        ai_insights_json=json.dumps({"summary": insights_str}),
+        ai_insights_json=json.dumps(metrics),
         pdf_url=filepath # Storing local path securely
     )
     db.add(db_report)

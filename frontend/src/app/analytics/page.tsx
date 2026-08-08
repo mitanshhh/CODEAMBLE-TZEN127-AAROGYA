@@ -17,6 +17,7 @@ export default function Analytics() {
   const { selectedHospitalId } = useAuth();
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [aiInsights, setAiInsights] = useState<any>(null);
+  const [dashboardMetrics, setDashboardMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(true);
   const hospitalId = selectedHospitalId;
@@ -31,10 +32,21 @@ export default function Analytics() {
     try {
       setLoading(true);
       const q = hospitalId ? `?hospital_id=${hospitalId}` : "";
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/analytics/health-score${q}`);
-      if (!res.ok) throw new Error("Failed to load analytics");
-      const json = await res.json();
-      setHealthScore(json.health_score ?? null);
+      
+      const [scoreRes, dashRes] = await Promise.all([
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/analytics/health-score${q}`),
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/analytics/dashboard${q}`)
+      ]);
+      
+      if (scoreRes.ok) {
+        const json = await scoreRes.json();
+        setHealthScore(json.health_score ?? null);
+      }
+      
+      if (dashRes.ok) {
+        setDashboardMetrics(await dashRes.json());
+      }
+      
       fetchAiInsights();
     } catch (error: any) {
       console.error("Failed to load analytics", error);
@@ -58,26 +70,26 @@ export default function Analytics() {
     }
   };
 
-  const kpis = {
-    total_medicines: 2450,
-    out_of_stock: 12,
-    occupancy_percentage: 78,
-    occupied_beds: 115,
-    doctors_present: 8,
-    total_doctors: 10,
-    patient_footfall_today: 342
+  const kpis = dashboardMetrics ? {
+    total_medicines: dashboardMetrics.inventory.total,
+    out_of_stock: dashboardMetrics.inventory.low_stock,
+    occupancy_percentage: dashboardMetrics.beds.total > 0 ? Math.round((dashboardMetrics.beds.occupied / dashboardMetrics.beds.total) * 100) : 0,
+    occupied_beds: dashboardMetrics.beds.occupied,
+    doctors_present: dashboardMetrics.doctors.present_today,
+    total_doctors: dashboardMetrics.doctors.total,
+    patient_footfall_today: dashboardMetrics.patients.total_today
+  } : {
+    total_medicines: 0,
+    out_of_stock: 0,
+    occupancy_percentage: 0,
+    occupied_beds: 0,
+    doctors_present: 0,
+    total_doctors: 0,
+    patient_footfall_today: 0
   };
 
   const charts = {
-    footfall: [
-      { date: "Mon", patients: 120 },
-      { date: "Tue", patients: 150 },
-      { date: "Wed", patients: 180 },
-      { date: "Thu", patients: 140 },
-      { date: "Fri", patients: 200 },
-      { date: "Sat", patients: 250 },
-      { date: "Sun", patients: 190 }
-    ]
+    footfall: dashboardMetrics?.charts?.footfall || []
   };
 
   if (loading) {
@@ -120,7 +132,7 @@ export default function Analytics() {
               healthScore !== null && healthScore > 75 ? 'text-green-600' :
               healthScore !== null && healthScore > 50 ? 'text-yellow-600' : 'text-red-600'
             }`}>
-              {healthScore !== null ? healthScore : '--'}<span className="text-sm text-muted-foreground font-medium">/100</span>
+              {healthScore !== null ? Math.round(healthScore) : '--'}<span className="text-sm text-muted-foreground font-medium">/100</span>
             </p>
           </div>
         </div>

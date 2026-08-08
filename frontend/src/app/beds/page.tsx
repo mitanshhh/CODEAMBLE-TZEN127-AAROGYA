@@ -34,6 +34,10 @@ export default function BedManagement() {
 
   // Add Bed Dialog States
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedEditBed, setSelectedEditBed] = useState<any>(null);
+  
+  // Bed Form State
   const [bedNumber, setBedNumber] = useState("");
   const [ward, setWard] = useState("");
   const [bedType, setBedType] = useState("");
@@ -159,6 +163,7 @@ export default function BedManagement() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          hospital_id: selectedHospitalId,
           bed_number: bedNumber,
           ward,
           bed_type: bedType
@@ -181,6 +186,52 @@ export default function BedManagement() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEditBed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEditBed || !bedNumber.trim() || !ward.trim() || !bedType.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/${selectedEditBed.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bed_number: bedNumber,
+          ward,
+          bed_type: bedType
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to update bed");
+      }
+
+      toast.success(`Bed ${bedNumber} updated successfully!`);
+      setIsEditDialogOpen(false);
+      setSelectedEditBed(null);
+      setBedNumber("");
+      setWard("");
+      setBedType("");
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openEditDialog = (bed: any) => {
+    setSelectedEditBed(bed);
+    setBedNumber(bed.bed_number);
+    setWard(bed.ward);
+    setBedType(bed.bed_type || "General");
+    setIsEditDialogOpen(true);
   };
 
   return (
@@ -273,8 +324,73 @@ export default function BedManagement() {
           <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <BedTable beds={beds} onAdmit={handleAdmit} onDischarge={handleDischarge} onStatusChange={handleStatusChange} />
+        <BedTable 
+          beds={beds} 
+          onAdmit={handleAdmit} 
+          onDischarge={handleDischarge} 
+          onStatusChange={handleStatusChange}
+          onEdit={canManage ? openEditDialog : undefined}
+        />
       )}
+
+      {/* Edit Bed Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Bed</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditBed} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="editBedNumber">Bed Number / Name</Label>
+              <Input
+                id="editBedNumber"
+                placeholder="e.g. Bed 15, Bed-A"
+                value={bedNumber}
+                onChange={(e) => setBedNumber(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editWard">Ward</Label>
+              <Select value={ward} onValueChange={(v) => setWard(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select ward" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="General Ward">General Ward</SelectItem>
+                  <SelectItem value="ICU">ICU</SelectItem>
+                  <SelectItem value="Emergency">Emergency</SelectItem>
+                  <SelectItem value="Maternity">Maternity</SelectItem>
+                  <SelectItem value="Pediatric">Pediatric</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editBedType">Bed Type</Label>
+              <Select value={bedType} onValueChange={(v) => setBedType(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select bed type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="General">General</SelectItem>
+                  <SelectItem value="ICU">ICU</SelectItem>
+                  <SelectItem value="Oxygen Bed">Oxygen Bed</SelectItem>
+                  <SelectItem value="Ventilator Bed">Ventilator Bed</SelectItem>
+                  <SelectItem value="Pediatric">Pediatric</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

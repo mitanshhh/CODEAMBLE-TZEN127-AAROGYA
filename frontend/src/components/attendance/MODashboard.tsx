@@ -48,6 +48,10 @@ export default function MODashboard() {
   };
 
   useEffect(() => {
+    if (!selectedHospitalId) {
+      setLoading(false);
+      return;
+    }
     fetchData();
   }, [filterStatus, selectedHospitalId]);
 
@@ -64,6 +68,26 @@ export default function MODashboard() {
       default: return 'bg-gray-100 text-gray-700 border-gray-200';
     }
   };
+
+  if (!selectedHospitalId) {
+    return (
+      <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">Doctor Attendance</h2>
+            <p className="text-sm text-muted-foreground mt-1">Real-time monitoring of clinical staff presence and availability.</p>
+          </div>
+        </div>
+        <Card className="border-border shadow-sm flex flex-col items-center justify-center p-12 text-center h-[50vh]">
+          <Activity className="w-12 h-12 text-muted-foreground/50 mb-4" />
+          <h3 className="text-xl font-semibold text-foreground mb-2">Select a Health Centre</h3>
+          <p className="text-muted-foreground max-w-md">
+            Please select a specific Primary Health Centre (PHC) from the top dropdown to view and manage its attendance records.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-10">

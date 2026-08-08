@@ -105,7 +105,8 @@ def update_inventory_item(
     old_qty = item.quantity
     
     for key, value in item_in.model_dump(exclude_unset=True).items():
-        setattr(item, key, value)
+        if key != "note":
+            setattr(item, key, value)
         
     if item.quantity <= item.min_threshold:
         item.status = "Low Stock"
@@ -114,7 +115,8 @@ def update_inventory_item(
         
     if item.quantity != old_qty:
         diff = item.quantity - old_qty
-        log_inventory_change(db, item.id, "UPDATE" if diff > 0 else "DISPENSE", abs(diff), current_user.id, "Manual Update")
+        action_note = item_in.note if item_in.note else "Manual Update"
+        log_inventory_change(db, item.id, "UPDATE" if diff > 0 else "DISPENSE", abs(diff), current_user.id, action_note)
         
     db.commit()
     db.refresh(item)

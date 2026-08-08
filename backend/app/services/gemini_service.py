@@ -17,7 +17,9 @@ def get_inventory_insights(inventory_data: list) -> str:
     
     Return ONLY a valid JSON object strictly matching this schema:
     {{
-        "insights": "Detailed markdown string containing your analysis"
+        "insights": ["insight string 1", "insight string 2"],
+        "risk_factors": ["risk string 1"],
+        "recommendations": ["recommendation string 1"]
     }}
     """
     try:

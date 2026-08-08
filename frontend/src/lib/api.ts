@@ -60,7 +60,21 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     headers.set("Content-Type", "application/json");
   }
 
-  let res = await fetch(url, { ...options, headers });
+  let finalUrl = url;
+  if (typeof window !== "undefined") {
+    const selectedHospitalId = localStorage.getItem("selectedHospitalId");
+    if (selectedHospitalId && selectedHospitalId !== "undefined" && selectedHospitalId !== "null") {
+      try {
+        const urlObj = new URL(url);
+        urlObj.searchParams.set("hospital_id", selectedHospitalId);
+        finalUrl = urlObj.toString();
+      } catch (e) {
+        // Fallback for relative URLs if any
+      }
+    }
+  }
+
+  let res = await fetch(finalUrl, { ...options, headers });
 
   // Attempt token refresh on 401
   if (res.status === 401) {
@@ -68,7 +82,7 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     if (refreshed) {
       const newToken = getToken();
       if (newToken) headers.set("Authorization", `Bearer ${newToken}`);
-      res = await fetch(url, { ...options, headers });
+      res = await fetch(finalUrl, { ...options, headers });
     } else {
       clearTokens();
       throw new Error("Session expired. Please log in again.");

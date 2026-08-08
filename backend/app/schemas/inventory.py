@@ -26,6 +26,7 @@ class InventoryItemUpdate(BaseModel):
     expiry_date: Optional[date] = None
     batch_number: Optional[str] = None
     status: Optional[str] = None
+    note: Optional[str] = None
 
 class InventoryItemResponse(InventoryItemBase):
     id: int

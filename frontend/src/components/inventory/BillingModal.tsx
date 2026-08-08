@@ -69,7 +69,10 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
         const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/${med.id}${hospitalQuery}`, {
           method: 'PUT',
           headers,
-          body: JSON.stringify({ quantity: newTotalQty })
+          body: JSON.stringify({ 
+            quantity: newTotalQty,
+            note: `Billed to patient: ${patientName}` 
+          })
         });
 
         if (!res.ok) {
@@ -191,7 +194,7 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
 
         <DialogFooter className="gap-2 sm:gap-0 mt-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isGenerating}>Cancel</Button>
-          <Button type="button" onClick={handleGenerateBill} disabled={isGenerating}>
+          <Button onClick={handleGenerateBill} disabled={isGenerating} className="cursor-pointer">
             {isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin"/> Processing...</> : 'Generate Bill'}
           </Button>
         </DialogFooter>

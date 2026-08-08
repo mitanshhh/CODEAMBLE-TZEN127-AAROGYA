@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { PatientAnalyticsCards } from "@/components/patients/PatientAnalyticsCards";
 import { PatientForm } from "@/components/patients/PatientForm";
 
@@ -25,6 +26,14 @@ export default function PatientsPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedActionPatient, setSelectedActionPatient] = useState<any>(null);
+  const [isEditingPatient, setIsEditingPatient] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    age: "",
+    gender: "",
+    contact: "",
+    medical_history: ""
+  });
   const [role, setRole] = useState("DEVELOPER");
   
   // Will be fetched from backend
@@ -97,6 +106,47 @@ export default function PatientsPage() {
     const matchesStatus = statusFilter === "All" || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const handleEditPatientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedActionPatient) return;
+    
+    try {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/${selectedActionPatient.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editFormData.name,
+          age: parseInt(editFormData.age) || 0,
+          gender: editFormData.gender,
+          contact: editFormData.contact,
+          medical_history: editFormData.medical_history
+        })
+      });
+      
+      if (!res.ok) throw new Error("Failed to update patient");
+      
+      toast.success("Patient details updated successfully");
+      setIsEditingPatient(false);
+      setSelectedActionPatient(null);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      toast.error("Error updating patient");
+    }
+  };
+
+  const openPatientEdit = (patient: any) => {
+    setSelectedActionPatient(patient);
+    setEditFormData({
+      name: patient.name || "",
+      age: patient.age?.toString() || "",
+      gender: patient.gender || "",
+      contact: patient.contact || "",
+      medical_history: patient.medical_history || ""
+    });
+    setIsEditingPatient(true);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -225,16 +275,21 @@ export default function PatientsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {p.status === "Waiting" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Under Consultation")} className="mr-2 text-xs h-8 text-blue-600 hover:text-blue-700 cursor-pointer hover:bg-muted">
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Consultation")} className="mr-2 text-xs h-8 text-blue-600 hover:text-blue-700 cursor-pointer hover:bg-muted">
                           Consult
                         </Button>
                       )}
-                      {p.status === "Under Consultation" && (
+                      {p.status === "Consultation" && (
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Checkup")} className="mr-2 text-xs h-8 text-orange-600 hover:text-orange-700 cursor-pointer hover:bg-muted">
+                          Checkup
+                        </Button>
+                      )}
+                      {p.status === "Checkup" && (
                         <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Completed")} className="mr-2 text-xs h-8 text-emerald-600 hover:text-emerald-700 cursor-pointer hover:bg-muted">
                           Complete
                         </Button>
                       )}
-                      <Button size="sm" variant="ghost" onClick={() => setSelectedActionPatient(p)} className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-muted">
+                      <Button size="sm" variant="ghost" onClick={() => openPatientEdit(p)} className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-muted">
                         <ChevronRight className="w-4 h-4" />
                       </Button>
                     </TableCell>
@@ -256,20 +311,71 @@ export default function PatientsPage() {
         </SheetContent>
       </Sheet>
 
-      <Dialog open={!!selectedActionPatient} onOpenChange={(open) => !open && setSelectedActionPatient(null)}>
-        <DialogContent className="sm:max-w-[425px]">
+      <Dialog open={isEditingPatient} onOpenChange={(open) => !open && setIsEditingPatient(false)}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Patient Actions</DialogTitle>
+            <DialogTitle>Edit Patient Details</DialogTitle>
             <DialogDescription>
-              Placeholder for patient actions (Edit, View Details, History) for PT-{selectedActionPatient?.id?.toString().padStart(4, '0')} - {selectedActionPatient?.name}.
+              Update information for PT-{selectedActionPatient?.id?.toString().padStart(4, '0')} - {selectedActionPatient?.name}.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 text-center text-sm text-muted-foreground border-y border-border my-4">
-            Detailed patient actions modal is not yet implemented.
-          </div>
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setSelectedActionPatient(null)}>Close</Button>
-          </div>
+          <form onSubmit={handleEditPatientSubmit} className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name</Label>
+                <Input 
+                  id="name" 
+                  value={editFormData.name} 
+                  onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} 
+                  required 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact">Contact Number</Label>
+                <Input 
+                  id="contact" 
+                  value={editFormData.contact} 
+                  onChange={(e) => setEditFormData({...editFormData, contact: e.target.value})} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="age">Age</Label>
+                <Input 
+                  id="age" 
+                  type="number" 
+                  value={editFormData.age} 
+                  onChange={(e) => setEditFormData({...editFormData, age: e.target.value})} 
+                  required 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gender">Gender</Label>
+                <Select value={editFormData.gender} onValueChange={(v) => setEditFormData({...editFormData, gender: v})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="medical_history">Medical History / Symptoms</Label>
+              <textarea 
+                id="medical_history" 
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={editFormData.medical_history} 
+                onChange={(e) => setEditFormData({...editFormData, medical_history: e.target.value})} 
+              />
+            </div>
+            <DialogFooter className="mt-6">
+              <Button type="button" variant="outline" onClick={() => setIsEditingPatient(false)}>Cancel</Button>
+              <Button type="submit">Save Changes</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

@@ -15,6 +15,9 @@ class BedUpdate(BaseModel):
     status: Optional[str] = None
     patient_id: Optional[int] = None
     admitted_at: Optional[datetime] = None
+    bed_number: Optional[str] = None
+    ward: Optional[str] = None
+    bed_type: Optional[str] = None
 
 class BedResponse(BedBase):
     id: int

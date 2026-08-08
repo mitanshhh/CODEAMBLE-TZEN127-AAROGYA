@@ -127,6 +127,8 @@ export default function DistrictAdminDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...newPhc,
+          district: newPhc.location || "North District",
+          state: "Maharashtra",
           health_score: 100,
           status: "Active",
           latitude: lat,
@@ -140,7 +142,13 @@ export default function DistrictAdminDashboard() {
         fetchData();
       } else {
         const err = await res.json();
-        toast.error(err.detail || "Registration failed");
+        let errorMsg = "Registration failed";
+        if (typeof err.detail === 'string') {
+          errorMsg = err.detail;
+        } else if (Array.isArray(err.detail)) {
+          errorMsg = err.detail.map((e: any) => `${e.loc?.join('.')} ${e.msg}`).join(', ');
+        }
+        toast.error(errorMsg);
       }
     } catch (e) {
       toast.error("Network error");

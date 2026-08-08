@@ -17,6 +17,13 @@ class HealthCentre(Base):
     longitude = Column(Float, nullable=True)
     contact_number = Column(String, nullable=True)
     email = Column(String, nullable=True)
+    medical_officer = Column(String, nullable=True)
+    phc_id = Column(String, nullable=True)
+    admin_email = Column(String, nullable=True)
+    admin_mobile = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    health_score = Column(Integer, default=100)
+    status = Column(String, default="Active")
 
     # Relationships
     staff = relationship("User", back_populates="hospital")

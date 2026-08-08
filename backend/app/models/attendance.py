@@ -16,6 +16,7 @@ class Doctor(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     attendance_records = relationship("AttendanceRecord", back_populates="doctor")
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class DailyQRSession(Base):
