@@ -14,6 +14,7 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
   const canManage = user?.role && allowedRoles.includes(user.role);
   
   const [patientName, setPatientName] = useState("");
+  const [patientCode, setPatientCode] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
   const [admissionReason, setAdmissionReason] = useState("");
   const [days, setDays] = useState("3");
@@ -24,7 +25,7 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
   const handleAdmit = async (action: string) => {
     if (!patientName) return toast.error("Patient name is required");
     setLoading(true);
-    await onAdmit(bed.id, patientName, patientPhone, admissionReason, parseInt(days), action);
+    await onAdmit(bed.id, patientName, patientPhone, admissionReason, parseInt(days), action, patientCode);
     setLoading(false);
     onOpenChange(false);
   };
@@ -87,8 +88,12 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
               </h3>
               <div className="grid grid-cols-2 gap-y-4 gap-x-3 text-xs">
                 <div>
+                  <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-1">Patient ID</p>
+                  <p className="font-semibold text-primary">{bed.patient?.patient_code || bed.patient_code || (bed.patient_id ? `PT-${bed.patient_id.toString().padStart(4, '0')}` : "--")}</p>
+                </div>
+                <div>
                   <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-1">Patient Name</p>
-                  <p className="font-medium text-foreground">{bed.patient_name || "--"}</p>
+                  <p className="font-medium text-foreground">{bed.patient_name || bed.patient?.name || "--"}</p>
                 </div>
                 {bed.patient_phone && (
                   <div>
@@ -136,6 +141,14 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
                 <CheckCircle2 className="w-4 h-4" /> Ready for Admission
               </h3>
               <div className="space-y-4 pt-1 text-sm">
+                <div className="space-y-2">
+                  <Label>Patient ID / ABHA ID <span className="text-xs text-muted-foreground font-normal">(Optional)</span></Label>
+                  <Input 
+                    placeholder="e.g. PT-0001 or ABHA-1234 (Links existing patient)" 
+                    value={patientCode}
+                    onChange={e => setPatientCode(e.target.value)}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Patient Name</Label>
                   <Input 

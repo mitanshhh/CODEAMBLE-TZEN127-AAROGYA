@@ -81,7 +81,7 @@ export default function BedManagement() {
     }
   }, [selectedHospitalId]);
 
-  const handleAdmit = async (bedId: number, patientName: string, patientPhone: string, admissionReason: string, days: number, action: string) => {
+  const handleAdmit = async (bedId: number, patientName: string, patientPhone: string, admissionReason: string, days: number, action: string, patientCode?: string) => {
     try {
       const expectedDischarge = new Date();
       expectedDischarge.setDate(expectedDischarge.getDate() + days);
@@ -93,6 +93,7 @@ export default function BedManagement() {
         body: JSON.stringify({
           action: action,
           patient_name: patientName,
+          patient_code: patientCode || null,
           patient_phone: patientPhone || null,
           admission_reason: admissionReason || null,
           doctor_id: 1,

@@ -61,17 +61,17 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   }
 
   let finalUrl = url;
-  if (typeof window !== "undefined") {
-    const selectedHospitalId = localStorage.getItem("selectedHospitalId");
-    if (selectedHospitalId && selectedHospitalId !== "undefined" && selectedHospitalId !== "null") {
-      try {
-        const urlObj = new URL(url);
+  try {
+    const urlObj = new URL(url, API_BASE_URL);
+    if (typeof window !== "undefined") {
+      const selectedHospitalId = localStorage.getItem("selectedHospitalId");
+      if (selectedHospitalId && selectedHospitalId !== "undefined" && selectedHospitalId !== "null") {
         urlObj.searchParams.set("hospital_id", selectedHospitalId);
-        finalUrl = urlObj.toString();
-      } catch (e) {
-        // Fallback for relative URLs if any
       }
     }
+    finalUrl = urlObj.toString();
+  } catch (e) {
+    // Fallback for invalid URLs if any
   }
 
   let res = await fetch(finalUrl, { ...options, headers });

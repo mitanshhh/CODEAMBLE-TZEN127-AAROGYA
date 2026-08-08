@@ -1,5 +1,5 @@
 "use client";
-import { apiFetch } from '@/lib/api';
+import { apiFetch, API_BASE_URL } from '@/lib/api';
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { PatientAnalyticsCards } from "@/components/patients/PatientAnalyticsCards";
 import { PatientForm } from "@/components/patients/PatientForm";
+import { toast } from "sonner";
 
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -28,6 +29,7 @@ export default function PatientsPage() {
   const [selectedActionPatient, setSelectedActionPatient] = useState<any>(null);
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [editFormData, setEditFormData] = useState({
+    patient_code: "",
     name: "",
     age: "",
     gender: "",
@@ -41,29 +43,28 @@ export default function PatientsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
       // Fetch patients
-      const pRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/${hospitalQuery}`);
+      const pRes = await apiFetch(`${API_BASE_URL}/api/v1/patients/`);
       if (pRes.ok) {
         const pData = await pRes.json();
         setPatients(pData.data || []);
       }
       
       // Fetch analytics
-      const aRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/analytics${hospitalQuery}`);
+      const aRes = await apiFetch(`${API_BASE_URL}/api/v1/patients/analytics`);
       if (aRes.ok) {
         const aData = await aRes.json();
         setAnalytics(aData);
       }
       
       // Fetch doctors
-      const dRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/doctors${hospitalQuery}`);
+      const dRes = await apiFetch(`${API_BASE_URL}/api/v1/patients/doctors`);
       if (dRes.ok) {
         const dData = await dRes.json();
         setDoctors(dData);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Backend connection error:", err);
     }
     setLoading(false);
   };
@@ -72,23 +73,28 @@ export default function PatientsPage() {
 
   const handleRegisterPatient = async (data: any) => {
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/v1/patients/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...data })
       });
       if (res.ok) {
+        toast.success("Patient registered successfully!");
         setIsFormOpen(false);
         fetchData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.detail || "Failed to register patient");
       }
     } catch (err) {
       console.error(err);
+      toast.error("Network error: Could not reach backend server");
     }
   };
 
   const updateStatus = async (id: number, status: string) => {
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/${id}`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/v1/patients/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
@@ -102,7 +108,12 @@ export default function PatientsPage() {
   };
 
   const filteredPatients = patients.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || String(p.id).includes(search);
+    const searchLower = search.toLowerCase();
+    const matchesSearch = 
+      p.name?.toLowerCase().includes(searchLower) || 
+      String(p.id).includes(searchLower) ||
+      p.patient_code?.toLowerCase().includes(searchLower) ||
+      p.contact?.includes(searchLower);
     const matchesStatus = statusFilter === "All" || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -112,10 +123,11 @@ export default function PatientsPage() {
     if (!selectedActionPatient) return;
     
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/${selectedActionPatient.id}`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/v1/patients/${selectedActionPatient.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          patient_code: editFormData.patient_code.trim() || null,
           name: editFormData.name,
           age: parseInt(editFormData.age) || 0,
           gender: editFormData.gender,
@@ -139,6 +151,7 @@ export default function PatientsPage() {
   const openPatientEdit = (patient: any) => {
     setSelectedActionPatient(patient);
     setEditFormData({
+      patient_code: patient.patient_code || `PT-${patient.id.toString().padStart(4, '0')}`,
       name: patient.name || "",
       age: patient.age?.toString() || "",
       gender: patient.gender || "",
@@ -251,7 +264,7 @@ export default function PatientsPage() {
               ) : (
                 filteredPatients.map((p) => (
                   <TableRow key={p.id} className="hover:bg-muted/30 transition-colors group">
-                    <TableCell className="font-semibold text-primary">PT-{p.id.toString().padStart(4, '0')}</TableCell>
+                    <TableCell className="font-semibold text-primary">{p.patient_code || `PT-${p.id.toString().padStart(4, '0')}`}</TableCell>
                     <TableCell>
                       <div className="font-medium">{p.name}</div>
                       <div className="text-xs text-muted-foreground">{p.age}y • {p.gender}</div>
@@ -318,10 +331,19 @@ export default function PatientsPage() {
           <DialogHeader>
             <DialogTitle>Edit Patient Details</DialogTitle>
             <DialogDescription>
-              Update information for PT-{selectedActionPatient?.id?.toString().padStart(4, '0')} - {selectedActionPatient?.name}.
+              Update information for Patient ID: {editFormData.patient_code || `PT-${selectedActionPatient?.id?.toString().padStart(4, '0')}`}.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditPatientSubmit} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="patient_code">Patient ID / ABHA ID</Label>
+              <Input 
+                id="patient_code" 
+                value={editFormData.patient_code} 
+                onChange={(e) => setEditFormData({...editFormData, patient_code: e.target.value})} 
+                placeholder="e.g. ABHA-1234-5678 or PT-0001"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>

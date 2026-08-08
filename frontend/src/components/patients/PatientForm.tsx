@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function PatientForm({ onSubmit, onClose, doctors = [] }: any) {
   const [formData, setFormData] = useState({
+    patient_code: "",
     full_name: "",
     age: "",
     gender: "",
@@ -38,8 +39,18 @@ export function PatientForm({ onSubmit, onClose, doctors = [] }: any) {
     
     // Process form data before submission
     const payload = {
-      ...formData,
+      name: formData.full_name,
+      patient_code: formData.patient_code.trim() || null,
       age: parseInt(formData.age),
+      gender: formData.gender,
+      contact: formData.phone || null,
+      address: formData.village || null,
+      medical_history: [
+        formData.symptoms ? `Symptoms: ${formData.symptoms}` : null,
+        formData.visit_type ? `Visit Type: ${formData.visit_type}` : null,
+        formData.department ? `Department: ${formData.department}` : null,
+        formData.remarks ? `Remarks: ${formData.remarks}` : null
+      ].filter(Boolean).join(" | "),
       weight: formData.weight ? parseFloat(formData.weight) : null,
       height: formData.height ? parseFloat(formData.height) : null,
       doctor_id: formData.doctor_id !== "none" ? parseInt(formData.doctor_id) : null,
@@ -55,7 +66,7 @@ export function PatientForm({ onSubmit, onClose, doctors = [] }: any) {
         <h2 className="text-xl font-bold text-foreground">
           New Patient Registration
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">Register a new patient visit and generate ID.</p>
+        <p className="text-sm text-muted-foreground mt-1">Register a new patient visit and assign unique Patient ID.</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -69,6 +80,18 @@ export function PatientForm({ onSubmit, onClose, doctors = [] }: any) {
             </h3>
             
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2 col-span-2">
+                <label className="text-sm font-medium flex items-center justify-between">
+                  <span>Patient ID / ABHA ID <span className="text-xs text-muted-foreground font-normal">(Optional - Auto-generated if left blank)</span></span>
+                </label>
+                <Input 
+                  name="patient_code" 
+                  placeholder="e.g. ABHA-1234-5678 or PT-0001" 
+                  value={formData.patient_code} 
+                  onChange={handleChange} 
+                />
+              </div>
+
               <div className="space-y-2 col-span-2">
                 <label className="text-sm font-medium">Full Name <span className="text-red-500">*</span></label>
                 <Input required name="full_name" value={formData.full_name} onChange={handleChange} />

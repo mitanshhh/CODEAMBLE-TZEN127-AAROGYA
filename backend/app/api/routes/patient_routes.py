@@ -96,17 +96,23 @@ def get_patient_doctors(
 def register_patient(
     patient_in: PatientCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.RECEPTIONIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER])),
+    current_user: User = Depends(require_role([UserRole.RECEPTIONIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER])),
     hospital_id: int = Depends(resolve_hospital_id)
 ):
     patient_in.hospital_id = hospital_id
     
-    new_patient = Patient(**patient_in.model_dump(), status="Outpatient")
+    patient_dict = patient_in.model_dump()
+    new_patient = Patient(**patient_dict, status="Outpatient")
     db.add(new_patient)
+    db.flush()
+
+    if not new_patient.patient_code:
+        new_patient.patient_code = f"PT-{str(new_patient.id).zfill(4)}"
+        
     db.commit()
     db.refresh(new_patient)
 
-    log_audit(db, new_patient.id, current_user.id, "CREATE", "Registered new patient")
+    log_audit(db, new_patient.id, current_user.id, "CREATE", f"Registered new patient ({new_patient.patient_code})")
     return new_patient
 
 @router.get("/{patient_id}", response_model=PatientResponse)

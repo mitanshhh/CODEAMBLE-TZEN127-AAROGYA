@@ -29,6 +29,7 @@ interface BillingModalProps {
 
 export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedicines, onSuccess }: BillingModalProps) {
   const [patientName, setPatientName] = useState("");
+  const [patientCode, setPatientCode] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [prescribedBy, setPrescribedBy] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -37,6 +38,7 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
     if (isOpen) {
       // Reset state on open
       setPatientName("");
+      setPatientCode("");
       setContactNumber("");
       setPrescribedBy("");
       setIsGenerating(false);
@@ -51,6 +53,8 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
     setIsGenerating(true);
 
     try {
+      const pIdStr = patientCode.trim() ? ` (ID: ${patientCode.trim()})` : '';
+
       // 1. Update inventory for each selected medicine
       for (const med of selectedMedicines) {
         // med.maxQty holds the original available quantity. med.quantity is the amount sold.
@@ -71,7 +75,7 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
           headers,
           body: JSON.stringify({ 
             quantity: newTotalQty,
-            note: `Billed to patient: ${patientName}` 
+            note: `Billed to patient: ${patientName}${pIdStr}` 
           })
         });
 
@@ -97,9 +101,16 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
 
       // Patient Info
       doc.setFontSize(11);
-      doc.text(`Patient Name: ${patientName}`, 14, 40);
-      doc.text(`Contact: ${contactNumber}`, 14, 46);
-      doc.text(`Prescribed By: ${prescribedBy}`, 14, 52);
+      let currentY = 40;
+      if (patientCode.trim()) {
+        doc.text(`Patient ID: ${patientCode.trim()}`, 14, currentY);
+        currentY += 6;
+      }
+      doc.text(`Patient Name: ${patientName}`, 14, currentY);
+      currentY += 6;
+      doc.text(`Contact: ${contactNumber}`, 14, currentY);
+      currentY += 6;
+      doc.text(`Prescribed By: ${prescribedBy}`, 14, currentY);
 
       // Bill Info
       doc.text(`Bill No: ${billNo}`, 140, 40);
@@ -115,7 +126,7 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
       ]);
 
       autoTable(doc, {
-        startY: 60,
+        startY: currentY + 8,
         head: [tableColumn],
         body: tableRows,
         theme: 'striped',
@@ -161,6 +172,16 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">Patient ID / ABHA ID <span className="text-xs text-muted-foreground font-normal">(Optional)</span></label>
+            <Input 
+              placeholder="e.g. PT-0001 or ABHA-1234-5678" 
+              value={patientCode} 
+              onChange={e => setPatientCode(e.target.value)} 
+              className="bg-background"
+            />
+          </div>
+
           <div className="grid gap-2">
             <label className="text-sm font-medium">Patient Name <span className="text-destructive">*</span></label>
             <Input 

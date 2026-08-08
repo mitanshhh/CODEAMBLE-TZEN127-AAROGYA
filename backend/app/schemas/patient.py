@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime
 
 class PatientBase(BaseModel):
+    patient_code: Optional[str] = None
     name: str
     age: int
     gender: str
@@ -14,6 +15,7 @@ class PatientCreate(PatientBase):
     hospital_id: Optional[int] = None
 
 class PatientUpdate(BaseModel):
+    patient_code: Optional[str] = None
     name: Optional[str] = None
     age: Optional[int] = None
     gender: Optional[str] = None
@@ -25,6 +27,7 @@ class PatientUpdate(BaseModel):
 class PatientResponse(PatientBase):
     id: int
     hospital_id: int
+    patient_code: Optional[str] = None
     status: str
     admitted_at: datetime
     discharged_at: Optional[datetime] = None

@@ -120,6 +120,7 @@ def get_bed_analytics(
 class AdmitPayload(BaseModel):
     action: str
     patient_name: str
+    patient_code: Optional[str] = None
     patient_phone: Optional[str] = None
     admission_reason: Optional[str] = None
     doctor_id: Optional[int] = None
@@ -140,25 +141,43 @@ def admit_patient(
     if bed.status != "Available":
         raise HTTPException(status_code=400, detail="Bed is not available")
     
-    # Create a new patient record since the frontend sends patient details
-    new_patient = Patient(
-        hospital_id=hospital_id,
-        name=payload.patient_name,
-        contact=payload.patient_phone,
-        medical_history=payload.admission_reason,
-        status="Admitted",
-        age=0,
-        gender="Unknown"
-    )
-    db.add(new_patient)
-    db.commit()
-    db.refresh(new_patient)
-    
+    # Check if patient exists by patient_code
+    existing_patient = None
+    if payload.patient_code:
+        existing_patient = db.query(Patient).filter(
+            Patient.hospital_id == hospital_id,
+            Patient.patient_code.ilike(payload.patient_code.strip())
+        ).first()
+
+    if existing_patient:
+        patient_record = existing_patient
+        patient_record.status = "Admitted"
+        if payload.admission_reason:
+            patient_record.medical_history = (patient_record.medical_history or "") + f" | Bed Admission: {payload.admission_reason}"
+        if payload.patient_phone:
+            patient_record.contact = payload.patient_phone
+    else:
+        # Create a new patient record
+        patient_record = Patient(
+            hospital_id=hospital_id,
+            patient_code=payload.patient_code.strip() if payload.patient_code else None,
+            name=payload.patient_name,
+            contact=payload.patient_phone,
+            medical_history=payload.admission_reason,
+            status="Admitted",
+            age=0,
+            gender="Unknown"
+        )
+        db.add(patient_record)
+        db.flush()
+        if not patient_record.patient_code:
+            patient_record.patient_code = f"PT-{str(patient_record.id).zfill(4)}"
+
     bed.status = "Occupied"
-    bed.patient_id = new_patient.id
+    bed.patient_id = patient_record.id
     bed.admitted_at = datetime.now(timezone.utc)
     
-    log_audit(db, new_patient.id, current_user.id, "CREATE", f"Admitted to bed {bed.bed_number}")
+    log_audit(db, patient_record.id, current_user.id, "CREATE", f"Admitted to bed {bed.bed_number}")
     db.commit()
     db.refresh(bed)
     return bed

@@ -8,6 +8,7 @@ class Patient(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     hospital_id = Column(Integer, ForeignKey("health_centres.id"), nullable=False, index=True)
+    patient_code = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False, index=True)
     age = Column(Integer, nullable=False)
     gender = Column(String, nullable=False)
