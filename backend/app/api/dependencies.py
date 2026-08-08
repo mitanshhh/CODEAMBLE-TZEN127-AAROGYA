@@ -1,0 +1,64 @@
+from fastapi import Depends, HTTPException, status, Query
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+import jwt
+from typing import Optional, List
+
+from app.core.config import settings
+from app.db.database import get_db
+from app.models.user import User, UserRole
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+        
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+def require_role(allowed_roles: List[UserRole]):
+    def role_checker(current_user: User = Depends(get_current_user)):
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have enough privileges to access this resource"
+            )
+        return current_user
+    return role_checker
+
+def resolve_hospital_id(
+    hospital_id: Optional[int] = Query(None, description="Hospital ID (Required for Admins/Devs)"),
+    current_user: User = Depends(get_current_user)
+) -> int:
+    """
+    Dependency to resolve the hospital_id for a request.
+    If role is DISTRICT_ADMIN or DEVELOPER, accepts ?hospital_id=X query parameter to query any facility.
+    For standard staff roles, strictly forces queries to current_user.hospital_id.
+    """
+    if current_user.role in [UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]:
+        if not hospital_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="hospital_id query parameter is required for administrators to scope this request."
+            )
+        return hospital_id
+    
+    if not current_user.hospital_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not assigned to any health centre."
+        )
+    return current_user.hospital_id

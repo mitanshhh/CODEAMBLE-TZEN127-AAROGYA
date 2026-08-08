@@ -1,0 +1,25 @@
+from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+
+class HealthCentre(Base):
+    __tablename__ = "health_centres"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    type = Column(String, nullable=False) # PHC/CHC/Hospital
+    district = Column(String, nullable=False, index=True)
+    state = Column(String, nullable=False)
+    total_beds = Column(Integer, default=0)
+    available_beds = Column(Integer, default=0)
+    total_staff = Column(Integer, default=0)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    contact_number = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+
+    # Relationships
+    staff = relationship("User", back_populates="hospital")
+    inventory_items = relationship("InventoryItem", back_populates="hospital")
+    beds = relationship("Bed", back_populates="hospital")
+    patients = relationship("Patient", back_populates="hospital")
