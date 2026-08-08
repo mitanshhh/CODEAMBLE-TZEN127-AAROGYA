@@ -37,6 +37,7 @@ class InventoryItemResponse(InventoryItemBase):
 class InventoryLogResponse(BaseModel):
     id: int
     inventory_id: int
+    item_name: Optional[str] = None
     change_type: str
     change_amount: int
     reason: Optional[str] = None

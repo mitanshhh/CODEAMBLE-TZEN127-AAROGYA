@@ -221,19 +221,33 @@ def analyze_inventory_ai(
     except Exception:
         return {"raw_insights": insights_json}
 
-@router.get("/logs", response_model=PaginatedResponse[InventoryLogResponse])
+@router.get("/logs")
 def get_inventory_logs(
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.PHARMACIST, UserRole.DATA_ENTRY]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.DEVELOPER]))
 ):
     query = db.query(InventoryLog).join(InventoryItem).filter(InventoryItem.hospital_id == hospital_id)
     total = query.count()
     logs = query.order_by(InventoryLog.timestamp.desc()).offset(offset).limit(limit).all()
     
-    return PaginatedResponse(data=logs, total=total, limit=limit, offset=offset)
+    # Enrich each log with the item name from the relationship
+    data = []
+    for log in logs:
+        data.append({
+            "id": log.id,
+            "inventory_id": log.inventory_id,
+            "item_name": log.item.name if log.item else f"Item #{log.inventory_id}",
+            "change_type": log.change_type,
+            "change_amount": log.change_amount,
+            "reason": log.reason,
+            "performed_by_user_id": log.performed_by_user_id,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+        })
+    
+    return {"data": data, "total": total, "limit": limit, "offset": offset}
 
 class RequestCreate(BaseModel):
     item_name: str

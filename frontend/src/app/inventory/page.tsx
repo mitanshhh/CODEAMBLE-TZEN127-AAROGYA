@@ -49,9 +49,11 @@ interface InventoryItem {
 
 interface InventoryLog {
   id: number;
+  inventory_id: number;
   item_name: string;
-  action: string;
-  qty_changed: number;
+  change_type: string;   // RESTOCK / DISPENSE / UPDATE
+  change_amount: number;
+  reason: string | null;
   timestamp: string;
 }
 
@@ -937,31 +939,49 @@ export default function InventoryManagement() {
               Timeline of all additions, distributions, edits, and removals across the inventory.
             </DialogDescription>
           </DialogHeader>
-          <div className="overflow-y-auto flex-1 pr-2 py-4 space-y-4">
+          <div className="overflow-y-auto flex-1 pr-2 py-4 space-y-3">
             {logs.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No history logs found.</p>
             ) : (
-              logs.map((log) => (
-                <div key={log.id} className="flex items-start gap-4 p-3 rounded-lg border border-border bg-muted/20">
-                  <div className="mt-1">
-                    {log.action === 'ADDED' && <Package className="w-4 h-4 text-primary" />}
-                    {log.action === 'DISTRIBUTED' && <TrendingDown className="w-4 h-4 text-green-600" />}
-                    {log.action === 'EDITED' && <Sparkles className="w-4 h-4 text-yellow-600" />}
-                    {log.action === 'REMOVED' && <Minus className="w-4 h-4 text-destructive" />}
+              logs.map((log) => {
+                const isRestock = log.change_type === 'RESTOCK' || log.change_type === 'UPDATE';
+                const isDispense = log.change_type === 'DISPENSE';
+                const actionLabel = log.change_type === 'RESTOCK' ? 'Restocked'
+                  : log.change_type === 'DISPENSE' ? 'Dispensed (Bill)'
+                  : log.change_type === 'UPDATE' ? 'Updated'
+                  : log.change_type;
+                const iconColor = isRestock ? 'text-emerald-600' : isDispense ? 'text-amber-600' : 'text-blue-500';
+                const bgColor = isRestock ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800'
+                  : isDispense ? 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800'
+                  : 'bg-muted/20 border-border';
+
+                return (
+                  <div key={log.id} className={`flex items-start gap-4 p-3 rounded-lg border ${bgColor}`}>
+                    <div className="mt-1">
+                      {isRestock && <TrendingUp className={`w-4 h-4 ${iconColor}`} />}
+                      {isDispense && <TrendingDown className={`w-4 h-4 ${iconColor}`} />}
+                      {!isRestock && !isDispense && <Activity className={`w-4 h-4 ${iconColor}`} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">
+                        <span className={iconColor}>{actionLabel}</span>
+                        {' '}&mdash;{' '}
+                        <span className="font-bold">{log.item_name || `Item #${log.inventory_id}`}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        <span className="font-medium">{log.change_amount} units</span>
+                        {log.reason && <> &bull; {log.reason}</>}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground/70 mt-1">
+                        {new Date(log.timestamp).toLocaleString(undefined, {
+                          dateStyle: 'medium',
+                          timeStyle: 'short'
+                        })}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {log.action} <span className="font-bold">{log.qty_changed}</span> units of <span className="text-primary">{log.item_name}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(log.timestamp).toLocaleString(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short'
-                      })}
-                    </p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
           <DialogFooter>

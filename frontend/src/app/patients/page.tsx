@@ -231,7 +231,7 @@ export default function PatientsPage() {
                 <TableHead>Priority</TableHead>
                 <TableHead>Arrival Time</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right">Edit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -269,27 +269,29 @@ export default function PatientsPage() {
                       {p.admitted_at ? new Date(p.admitted_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute:'2-digit' }) : '--:--'}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={getStatusColor(p.status)}>
-                        {p.status}
-                      </Badge>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className={getStatusColor(p.status)}>
+                          {p.status}
+                        </Badge>
+                        {p.status === "Waiting" && (
+                          <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Consultation")} className="text-xs h-7 px-2 text-blue-600 border-blue-200 hover:bg-blue-50 cursor-pointer">
+                            → Consult
+                          </Button>
+                        )}
+                        {p.status === "Consultation" && (
+                          <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Checkup")} className="text-xs h-7 px-2 text-orange-600 border-orange-200 hover:bg-orange-50 cursor-pointer">
+                            → Checkup
+                          </Button>
+                        )}
+                        {p.status === "Checkup" && (
+                          <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Completed")} className="text-xs h-7 px-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 cursor-pointer">
+                            → Complete
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {p.status === "Waiting" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Consultation")} className="mr-2 text-xs h-8 text-blue-600 hover:text-blue-700 cursor-pointer hover:bg-muted">
-                          Consult
-                        </Button>
-                      )}
-                      {p.status === "Consultation" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Checkup")} className="mr-2 text-xs h-8 text-orange-600 hover:text-orange-700 cursor-pointer hover:bg-muted">
-                          Checkup
-                        </Button>
-                      )}
-                      {p.status === "Checkup" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Completed")} className="mr-2 text-xs h-8 text-emerald-600 hover:text-emerald-700 cursor-pointer hover:bg-muted">
-                          Complete
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" onClick={() => openPatientEdit(p)} className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-muted">
+                      <Button size="sm" variant="ghost" onClick={() => openPatientEdit(p)} className="h-8 w-8 p-0 cursor-pointer hover:bg-muted" title="Edit patient">
                         <ChevronRight className="w-4 h-4" />
                       </Button>
                     </TableCell>
