@@ -173,3 +173,16 @@ def analyze_inventory_ai(
     except Exception:
         return {"raw_insights": insights_json}
 
+@router.get("/logs", response_model=PaginatedResponse[InventoryLogResponse])
+def get_inventory_logs(
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.PHARMACIST, UserRole.DATA_ENTRY]))
+):
+    query = db.query(InventoryLog).join(InventoryItem).filter(InventoryItem.hospital_id == hospital_id)
+    total = query.count()
+    logs = query.order_by(InventoryLog.timestamp.desc()).offset(offset).limit(limit).all()
+    
+    return PaginatedResponse(data=logs, total=total, limit=limit, offset=offset)

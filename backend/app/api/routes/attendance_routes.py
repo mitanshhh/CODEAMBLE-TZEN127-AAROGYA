@@ -123,3 +123,50 @@ def get_attendance_dashboard(
         "present_doctors": present_count,
         "absent_doctors": total_doctors - present_count
     }
+
+@router.get("/records")
+def get_attendance_records(
+    status: str = "All",
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
+):
+    today = date.today()
+    session = db.query(DailyQRSession).filter(
+        DailyQRSession.hospital_id == hospital_id,
+        DailyQRSession.date == today
+    ).first()
+    
+    doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
+    records_by_doctor = {}
+    if session:
+        records = db.query(AttendanceRecord).filter(AttendanceRecord.session_id == session.id).all()
+        for r in records:
+            records_by_doctor[r.doctor_id] = r
+            
+    results = []
+    for doc in doctors:
+        record = records_by_doctor.get(doc.id)
+        doc_status = "Absent"
+        timestamp = None
+        scanned_via = None
+        
+        if record:
+            doc_status = "Present" if record.status == "PRESENT" else "Absent"
+            timestamp = record.timestamp.isoformat() if record.timestamp else None
+            scanned_via = record.scanned_via
+            
+        if status != "All" and doc_status != status:
+            continue
+            
+        results.append({
+            "id": doc.id,
+            "doctor_name": doc.user.username if doc.user else f"Doctor {doc.id}",
+            "specialization": doc.specialization or "General",
+            "status": doc_status,
+            "timestamp": timestamp,
+            "scanned_via": scanned_via
+        })
+        
+    return results
+

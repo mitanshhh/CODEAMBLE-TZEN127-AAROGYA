@@ -31,6 +31,35 @@ def get_map_data(
         for c in centres
     ]
 
+@router.get("/overview")
+def get_district_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+):
+    phcs = db.query(HealthCentre).filter(HealthCentre.type == "PHC").count()
+    chcs = db.query(HealthCentre).filter(HealthCentre.type == "CHC").count()
+    
+    total_beds = 0
+    total_staff = 0
+    for centre in db.query(HealthCentre).all():
+        total_beds += centre.total_beds or 0
+        total_staff += centre.total_staff or 0
+        
+    return {
+        "total_phcs": phcs,
+        "total_chcs": chcs,
+        "total_beds": total_beds,
+        "total_staff": total_staff,
+        "critical_alerts": 2 # Mock critical alerts
+    }
+
+@router.get("/requests", response_model=List[ResourceRequestResponse])
+def get_all_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+):
+    return db.query(ResourceRequest).all()
+
 @router.post("/resource-request", response_model=ResourceRequestResponse)
 def create_resource_request(
     request_in: ResourceRequestCreate,
