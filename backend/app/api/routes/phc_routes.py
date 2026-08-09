@@ -1,17 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from app.db.database import get_db
 from app.models.health_centre import HealthCentre
 from app.models.user import User, UserRole
-from app.schemas.health_centre import HealthCentreResponse, HealthCentreUpdate, HealthCentreBase
+from app.schemas.health_centre import HealthCentreCreateResponse, HealthCentreResponse, HealthCentreUpdate, HealthCentreBase
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
 from app.core.security import get_password_hash
+from app.services.email_service import send_onboarding_email
 import secrets
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import os
-from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
 
 router = APIRouter()
 
@@ -50,7 +47,7 @@ def get_all_centres(
 ):
     return db.query(HealthCentre).all()
 
-@router.post("/", response_model=HealthCentreResponse)
+@router.post("/", response_model=HealthCentreCreateResponse)
 def create_centre(
     centre_data: HealthCentreBase,
     db: Session = Depends(get_db),
@@ -60,57 +57,54 @@ def create_centre(
     db.add(hc)
     db.commit()
     db.refresh(hc)
+
+    admin_user_created = False
+    email_sent = False
+    email_detail = "No admin email provided; onboarding email was not sent."
     
     # Auto-create Medical Officer account for this new PHC
     if getattr(hc, 'admin_email', None):
-        password = secrets.token_urlsafe(8)
-        new_user = User(
-            username=hc.admin_email,
-            email=hc.admin_email,
-            hashed_password=get_password_hash(password),
-            role=UserRole.MEDICAL_OFFICER,
-            hospital_id=hc.id
+        admin_email = str(hc.admin_email)
+        existing_user = (
+            db.query(User)
+            .filter(or_(User.email == admin_email, User.username == admin_email))
+            .first()
         )
-        db.add(new_user)
-        db.commit()
-        
-        # Send welcome email
-        try:
-            smtp_user = os.getenv("SMTP_EMAIL")
-            smtp_pass = os.getenv("SMTP_PASSWORD")
-            smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-            smtp_port = int(os.getenv("SMTP_PORT", "587"))
-            
-            if smtp_user and smtp_pass:
-                msg = MIMEMultipart()
-                msg['From'] = smtp_user
-                msg['To'] = hc.admin_email
-                msg['Subject'] = f"Welcome to Aarogya Health Engine - {hc.name}"
-                
-                body = f"""Hello,
-                
-Your new Health Centre '{hc.name}' has been successfully registered on the Aarogya Health Engine platform.
+        if existing_user:
+            email_detail = "Admin user already exists for this email; onboarding email was not sent."
+        else:
+            password = secrets.token_urlsafe(12)
+            new_user = User(
+                username=admin_email,
+                email=admin_email,
+                hashed_password=get_password_hash(password),
+                role=UserRole.MEDICAL_OFFICER,
+                hospital_id=hc.id
+            )
+            db.add(new_user)
+            db.flush()
 
-You can now log in using the following credentials:
-Email: {hc.admin_email}
-Password: {password}
+            delivery = send_onboarding_email(
+                email_to=admin_email,
+                username=admin_email,
+                raw_password=password,
+                centre_name=hc.name,
+            )
+            email_sent = delivery.sent
+            email_detail = delivery.detail
+            if email_sent:
+                db.commit()
+                admin_user_created = True
+            else:
+                db.rollback()
 
-Please change your password immediately after logging in.
-
-Regards,
-Aarogya District Administration
-                """
-                msg.attach(MIMEText(body, 'plain'))
-                
-                server = smtplib.SMTP(smtp_host, smtp_port)
-                server.starttls()
-                server.login(smtp_user, smtp_pass)
-                server.send_message(msg)
-                server.quit()
-        except Exception as e:
-            print(f"Failed to send email: {e}")
-            
-    return hc
+    response = HealthCentreCreateResponse.model_validate(hc).model_dump()
+    response.update({
+        "admin_user_created": admin_user_created,
+        "email_sent": email_sent,
+        "email_detail": email_detail,
+    })
+    return response
 
 @router.put("/{hc_id}", response_model=HealthCentreResponse)
 def update_centre_by_id(

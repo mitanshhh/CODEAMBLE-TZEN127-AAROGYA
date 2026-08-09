@@ -12,6 +12,12 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: Optional[str] = None # Optional because admins can generate one
 
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[UserRole] = None
+    password: Optional[str] = None
+
 class UserResponse(UserBase):
     id: int
     created_at: datetime

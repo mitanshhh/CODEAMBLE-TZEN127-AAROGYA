@@ -1,9 +1,9 @@
 "use client";
 
-import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { RouteGuard } from "@/components/layout/RouteGuard";
+import { FloatingChatbot } from "@/components/chat/FloatingChatbot";
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
@@ -11,8 +11,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
-  const { user } = useAuth(); // Assume we need this to check if user is logged in
-  
+
   if (pathname === '/login') {
     return <>{children}</>;
   }
@@ -41,6 +40,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             {children}
           </RouteGuard>
         </main>
+        <FloatingChatbot />
       </div>
     </>
   );

@@ -227,7 +227,7 @@ def get_inventory_logs(
     hospital_id: int = Depends(resolve_hospital_id),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.DEVELOPER]))
+    current_user: User = Depends(get_current_user)
 ):
     query = db.query(InventoryLog).join(InventoryItem).filter(InventoryItem.hospital_id == hospital_id)
     total = query.count()

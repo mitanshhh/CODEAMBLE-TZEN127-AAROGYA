@@ -47,6 +47,8 @@ interface HealthCentre {
   location: string;
   medical_officer: string;
   status: string;
+  email_sent?: boolean;
+  email_detail?: string | null;
 }
 
 export default function HealthCentreManagement() {
@@ -128,7 +130,12 @@ export default function HealthCentreManagement() {
       });
       
       if (res.ok) {
-        toast.success("Health Centre registered & Email sent to Admin!");
+        const created = await res.json();
+        if (created.email_sent) {
+          toast.success("Health Centre registered and onboarding email sent.");
+        } else {
+          toast.warning(created.email_detail || "Health Centre registered, but onboarding email was not sent.");
+        }
         setIsRegisterOpen(false);
         setFormData({ name: '', type: 'PHC', health_score: 100, location: '', medical_officer: '', status: 'Active', phc_id: '', admin_email: '', admin_mobile: '' });
         fetchCentres();

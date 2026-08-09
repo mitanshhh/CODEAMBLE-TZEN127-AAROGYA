@@ -6,7 +6,7 @@ from app.api.routes import (
     auth_routes, user_routes, phc_routes, patient_routes, bed_routes, 
     inventory_routes, attendance_routes, district_routes, 
     analytics_routes, translate_routes, report_routes,
-    notification_routes
+    notification_routes, chat_routes
 )
 
 from app.core.scheduler import start_scheduler, shutdown_scheduler
@@ -54,4 +54,4 @@ app.include_router(analytics_routes.router, prefix=f"{settings.API_V1_STR}/analy
 app.include_router(translate_routes.router, prefix=f"{settings.API_V1_STR}/translate", tags=["translate"])
 app.include_router(report_routes.router, prefix=f"{settings.API_V1_STR}/reports", tags=["reports"])
 app.include_router(notification_routes.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
-
+app.include_router(chat_routes.router, prefix=f"{settings.API_V1_STR}/chat", tags=["chat"])

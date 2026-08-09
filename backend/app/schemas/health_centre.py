@@ -43,3 +43,9 @@ class HealthCentreResponse(HealthCentreBase):
     id: int
 
     model_config = {"from_attributes": True}
+
+
+class HealthCentreCreateResponse(HealthCentreResponse):
+    admin_user_created: bool = False
+    email_sent: bool = False
+    email_detail: Optional[str] = None

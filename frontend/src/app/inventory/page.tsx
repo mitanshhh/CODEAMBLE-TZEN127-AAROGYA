@@ -138,9 +138,9 @@ export default function InventoryManagement() {
         apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/requests?limit=100${hospitalQuery}`, fetchOpts)
       ]);
 
-      if (itemsRes.ok && logsRes.ok) {
+      if (itemsRes.ok) {
         const itemsData = await itemsRes.json();
-        const logsData = await logsRes.json();
+        const logsData = logsRes.ok ? await logsRes.json() : { data: [] };
         
         const mappedItems = (itemsData.data || []).map((item: any) => ({
           ...item,
@@ -816,7 +816,7 @@ export default function InventoryManagement() {
                 )}
                 {aiAnalysis && !aiLoading && (
                   <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed">
-                    <ReactMarkdown>{aiAnalysis.insights}</ReactMarkdown>
+                    <ReactMarkdown>{Array.isArray(aiAnalysis.insights) ? aiAnalysis.insights.join('\n\n') : aiAnalysis.insights || ''}</ReactMarkdown>
                   </div>
                 )}
               </div>

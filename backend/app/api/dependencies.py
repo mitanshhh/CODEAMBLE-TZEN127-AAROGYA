@@ -64,20 +64,23 @@ def require_permission(required_permission: str):
 
 def resolve_hospital_id(
     hospital_id: Optional[int] = Query(None, description="Hospital ID (Required for Admins/Devs)"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ) -> int:
     """
     Dependency to resolve the hospital_id for a request.
-    If role is DISTRICT_ADMIN or DEVELOPER, accepts ?hospital_id=X query parameter to query any facility.
+    If role is DISTRICT_ADMIN or DEVELOPER, accepts ?hospital_id=X query parameter.
+    If omitted, falls back to user's assigned hospital or the first available facility.
     For standard staff roles, strictly forces queries to current_user.hospital_id.
     """
     if current_user.role in [UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]:
-        if not hospital_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="hospital_id query parameter is required for administrators to scope this request."
-            )
-        return hospital_id
+        if hospital_id:
+            return hospital_id
+        if current_user.hospital_id:
+            return current_user.hospital_id
+        from app.models.health_centre import HealthCentre
+        first_hc = db.query(HealthCentre.id).first()
+        return first_hc[0] if first_hc else 1
     
     if not current_user.hospital_id:
         raise HTTPException(

@@ -37,21 +37,42 @@ def get_district_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
+    from app.models.bed import Bed
+    from app.models.inventory import InventoryItem
+    from app.models.attendance import AttendanceRecord, DailyQRSession
+    from datetime import datetime
+    
     phcs = db.query(HealthCentre).filter(HealthCentre.type == "PHC").count()
     chcs = db.query(HealthCentre).filter(HealthCentre.type == "CHC").count()
     
-    total_beds = 0
-    total_staff = 0
-    for centre in db.query(HealthCentre).all():
-        total_beds += centre.total_beds or 0
-        total_staff += centre.total_staff or 0
-        
+    # Bed Occupancy
+    total_beds = db.query(Bed).count()
+    occupied_beds = db.query(Bed).filter(Bed.status == "Occupied").count()
+    bed_occupancy_rate = round((occupied_beds / total_beds * 100), 1) if total_beds > 0 else 0
+    
+    # Medicine alerts: items where quantity is at or below threshold
+    medicine_alerts = db.query(InventoryItem).filter(InventoryItem.quantity <= InventoryItem.min_threshold).count()
+    
+    # Critical centres: health_score < 50 or 0 available beds
+    critical_centres = db.query(HealthCentre).filter(HealthCentre.available_beds == 0, HealthCentre.total_beds > 0).count()
+    
+    # Doctor presence rate (today)
+    today = datetime.now().date()
+    present_docs = db.query(AttendanceRecord).join(DailyQRSession).filter(
+        DailyQRSession.date == today,
+        AttendanceRecord.status.in_(["PRESENT", "LATE"])
+    ).count()
+    
+    total_docs = db.query(User).filter(User.role == UserRole.DOCTOR).count()
+    doctor_presence_rate = round((present_docs / total_docs * 100), 1) if total_docs > 0 else 0
+    
     return {
         "total_phcs": phcs,
         "total_chcs": chcs,
-        "total_beds": total_beds,
-        "total_staff": total_staff,
-        "critical_alerts": 2 # Mock critical alerts
+        "doctor_presence_rate": doctor_presence_rate,
+        "bed_occupancy_rate": bed_occupancy_rate,
+        "medicine_alerts": medicine_alerts,
+        "critical_centres": critical_centres,
     }
 
 @router.get("/requests", response_model=List[ResourceRequestResponse])

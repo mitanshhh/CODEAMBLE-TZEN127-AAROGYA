@@ -136,7 +136,12 @@ export default function DistrictAdminDashboard() {
         })
       });
       if (res.ok) {
-        toast.success("PHC Registered & Email Sent to Admin!");
+        const created = await res.json();
+        if (created.email_sent) {
+          toast.success("PHC registered and onboarding email sent.");
+        } else {
+          toast.warning(created.email_detail || "PHC registered, but onboarding email was not sent.");
+        }
         setIsRegisterOpen(false);
         setNewPhc({ name: "", type: "PHC", phc_id: "", admin_email: "", admin_mobile: "", location: "" });
         fetchData();

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
 from datetime import timedelta, datetime, timezone
 import uuid
 
@@ -55,8 +56,11 @@ def login(
     ip = request.client.host
     check_brute_force(ip)
 
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    clean_username = form_data.username.strip().lower()
+    user = db.query(User).filter(
+        or_(func.lower(User.username) == clean_username, func.lower(User.email) == clean_username)
+    ).first()
+    if not user or not verify_password(form_data.password.strip(), user.hashed_password):
         register_failed_attempt(ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

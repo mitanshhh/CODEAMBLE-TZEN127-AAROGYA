@@ -7,7 +7,7 @@ from app.models.user import User, UserRole
 from app.models.inventory import InventoryItem
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
 from app.services.health_score import calculate_health_score
-from app.services.gemini_service import get_inventory_insights
+from app.services.gemini_service import get_analytics_insights
 from app.core.rate_limit import limiter
 
 from app.models.patient import Patient
@@ -94,10 +94,22 @@ def get_ai_insights(
     hospital_id: int = Depends(resolve_hospital_id),
     current_user: User = Depends(get_current_user)
 ):
-    items = db.query(InventoryItem).filter(InventoryItem.hospital_id == hospital_id).limit(50).all()
-    data = [{"name": i.name, "quantity": i.quantity, "status": i.status} for i in items]
+    from app.models.bed import Bed
     
-    insights_json = get_inventory_insights(data)
+    # Gather high-level metrics for the AI to analyze
+    inventory_low = db.query(InventoryItem).filter(InventoryItem.hospital_id == hospital_id, InventoryItem.status == 'Low Stock').count()
+    total_beds = db.query(Bed).filter(Bed.hospital_id == hospital_id).count()
+    occupied_beds = db.query(Bed).filter(Bed.hospital_id == hospital_id, Bed.status == 'Occupied').count()
+    waiting_patients = db.query(Patient).filter(Patient.hospital_id == hospital_id, Patient.status == 'Waiting').count()
+    
+    metrics = {
+        "hospital_id": hospital_id,
+        "low_stock_items_count": inventory_low,
+        "bed_occupancy": f"{occupied_beds}/{total_beds}",
+        "waiting_patients": waiting_patients
+    }
+    
+    insights_json = get_analytics_insights(metrics)
     try:
         # Strip markdown json block if Gemini adds it
         if insights_json.startswith("```json"):
