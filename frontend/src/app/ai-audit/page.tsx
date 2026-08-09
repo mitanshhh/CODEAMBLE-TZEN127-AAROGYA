@@ -87,7 +87,7 @@ export default function AIAuditReports() {
           <Button 
             onClick={generateReport} 
             disabled={generating}
-            className="flex items-center gap-2 rounded-lg"
+            className="flex items-center gap-2 rounded-lg cursor-pointer"
           >
             {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
             {generating ? "Generating..." : "Generate Monthly Report"}
@@ -128,7 +128,7 @@ export default function AIAuditReports() {
                     Monthly Operational Audit
                   </h3>
                   <p className="text-sm text-muted-foreground flex items-center gap-2">
-                    Generated on {new Date(report.created_at).toLocaleDateString()}
+                    Generated on {new Date(report.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
                   </p>
                 </div>
 

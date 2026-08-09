@@ -80,7 +80,7 @@ function formatValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
-    return new Date(value).toLocaleString();
+    return new Date(value).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
   }
   return String(value);
 }
@@ -251,7 +251,7 @@ export function FloatingChatbot() {
             setOpen(true);
             setMinimized(false);
           }}
-          className="h-14 w-14 rounded-full shadow-xl ring-4 ring-primary/10"
+          className="h-14 w-14 rounded-full shadow-xl ring-4 ring-primary/10 cursor-pointer hover:scale-105 transition-transform"
           title="Open Aarogya AI"
         >
           <MessageCircle className="h-6 w-6" />
@@ -365,7 +365,7 @@ export function FloatingChatbot() {
                     placeholder="Ask about ABHA ID, stock, beds, or attendance..."
                     className="h-10"
                   />
-                  <Button type="submit" size="icon-lg" disabled={!canSend} title="Send message">
+                  <Button type="submit" size="icon-lg" disabled={!canSend} title="Send message" className="cursor-pointer">
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>
                 </form>

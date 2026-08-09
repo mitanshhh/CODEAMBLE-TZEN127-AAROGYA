@@ -81,7 +81,7 @@ export function AnalyticsCards({ kpis, forecast }: any) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
               <XAxis 
                 dataKey="date" 
-                tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { weekday: 'short' })}
+                tickFormatter={(val) => new Date(val).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short' })}
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 12, fill: '#6B7280' }}
@@ -96,7 +96,7 @@ export function AnalyticsCards({ kpis, forecast }: any) {
               />
               <Tooltip 
                 contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                labelFormatter={(val) => new Date(val).toLocaleDateString()}
+                labelFormatter={(val) => new Date(val).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
                 formatter={(val: any) => [`${val}%`, 'Occupancy']}
               />
               <Line 

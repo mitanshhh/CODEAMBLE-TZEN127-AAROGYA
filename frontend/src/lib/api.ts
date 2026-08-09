@@ -3,7 +3,9 @@
  * All calls go to the real FastAPI backend at NEXT_PUBLIC_API_URL.
  */
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_BASE_URL = typeof window !== "undefined" 
+  ? "" 
+  : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000");
 const V1 = `${API_BASE_URL}/api/v1`;
 
 // ─── Token Helpers ────────────────────────────────────
@@ -39,7 +41,9 @@ function clearTokens() {
   localStorage.removeItem("user");
   localStorage.removeItem("role");
   localStorage.removeItem("selectedHospitalId");
-  window.location.href = "/login";
+  if (window.location.pathname !== "/login") {
+    window.location.href = "/login";
+  }
 }
 
 // ─── Core Fetch ───────────────────────────────────────
@@ -61,23 +65,43 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   }
 
   let finalUrl = url;
+  if (typeof window !== "undefined") {
+    // Force URL to be relative by stripping the origin (e.g., http://localhost:8000)
+    finalUrl = url.replace(/^https?:\/\/[^\/]+/, "");
+  }
+
   try {
-    const urlObj = new URL(url, API_BASE_URL);
-    if (typeof window !== "undefined") {
+    // Parse the URL relative to a base
+    const base = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
+    const urlObj = new URL(finalUrl, base);
+    
+    if (typeof window !== "undefined" && !urlObj.pathname.includes("/auth/")) {
       const selectedHospitalId = localStorage.getItem("selectedHospitalId");
       if (selectedHospitalId && selectedHospitalId !== "undefined" && selectedHospitalId !== "null") {
-        urlObj.searchParams.set("hospital_id", selectedHospitalId);
+        if (!urlObj.searchParams.has("hospital_id")) {
+          urlObj.searchParams.set("hospital_id", selectedHospitalId);
+        }
       }
     }
-    finalUrl = urlObj.toString();
+
+    if (typeof window !== "undefined") {
+      // In browser, use relative path so Next.js rewrites proxy it
+      finalUrl = urlObj.pathname + urlObj.search;
+    } else {
+      // On server, use absolute URL
+      finalUrl = urlObj.toString();
+    }
   } catch (e) {
-    // Fallback for invalid URLs if any
+    console.error("apiFetch URL parse error", e);
   }
 
   let res = await fetch(finalUrl, { ...options, headers });
 
   // Attempt token refresh on 401
   if (res.status === 401) {
+    if (finalUrl.includes("/auth/")) {
+      return res;
+    }
     const refreshed = await tryRefresh();
     if (refreshed) {
       const newToken = getToken();
@@ -85,7 +109,6 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
       res = await fetch(finalUrl, { ...options, headers });
     } else {
       clearTokens();
-      throw new Error("Session expired. Please log in again.");
     }
   }
 

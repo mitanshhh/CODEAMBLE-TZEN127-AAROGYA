@@ -6,8 +6,10 @@ import uuid
 from app.db.database import get_db
 from app.models.attendance import DailyQRSession, AttendanceRecord, Doctor, RandomAttendanceCheck
 from app.models.user import User, UserRole
-from app.schemas.attendance import DailyQRSessionResponse, AttendanceRecordResponse
+from app.models.health_centre import HealthCentre
+from app.schemas.attendance import DailyQRSessionResponse, AttendanceRecordResponse, QRScanRequest
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
+import math
 from app.core.scheduler import schedule_random_check
 
 router = APIRouter()
@@ -43,14 +45,25 @@ def generate_qr_session(
     db.refresh(session)
     return session
 
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371000  # Radius of earth in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = math.sin(delta_phi / 2.0) ** 2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(delta_lambda / 2.0) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
 @router.post("/scan")
 def scan_qr_attendance(
-    qr_token: str,
-    doctor_id: int,
+    req: QRScanRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    session = db.query(DailyQRSession).filter(DailyQRSession.qr_token == qr_token, DailyQRSession.is_active == True).first()
+    session = db.query(DailyQRSession).filter(DailyQRSession.qr_token == req.qr_token, DailyQRSession.is_active == True).first()
     if not session:
         raise HTTPException(status_code=400, detail="Invalid or expired QR token")
         
@@ -59,13 +72,19 @@ def scan_qr_attendance(
     if datetime.now(timezone.utc) - updated_at_aware > timedelta(minutes=5):
         raise HTTPException(status_code=400, detail="QR code has expired. Please ask the Medical Officer to refresh it.")
     
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id, Doctor.hospital_id == session.hospital_id).first()
+    doctor = db.query(Doctor).filter(Doctor.id == req.doctor_id, Doctor.hospital_id == session.hospital_id).first()
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found in this hospital")
         
+    phc = db.query(HealthCentre).filter(HealthCentre.id == session.hospital_id).first()
+    if phc and hasattr(phc, 'latitude') and phc.latitude and phc.longitude:
+        dist = haversine(req.lat, req.lng, float(phc.latitude), float(phc.longitude))
+        if dist > 100:
+            raise HTTPException(status_code=400, detail=f"You are too far from the PHC ({int(dist)}m away). Must be within 100m.")
+    
     # 1. Check if this is a random verification response
     pending_check = db.query(RandomAttendanceCheck).filter(
-        RandomAttendanceCheck.doctor_id == doctor_id,
+        RandomAttendanceCheck.doctor_id == req.doctor_id,
         RandomAttendanceCheck.session_id == session.id,
         RandomAttendanceCheck.status == "PENDING"
     ).first()
@@ -78,14 +97,14 @@ def scan_qr_attendance(
     # 2. Otherwise, standard morning check-in
     existing_record = db.query(AttendanceRecord).filter(
         AttendanceRecord.session_id == session.id,
-        AttendanceRecord.doctor_id == doctor_id
+        AttendanceRecord.doctor_id == req.doctor_id
     ).first()
     
     if existing_record:
         return {"message": "Attendance already recorded for today"}
         
     record = AttendanceRecord(
-        doctor_id=doctor_id,
+        doctor_id=req.doctor_id,
         session_id=session.id,
         status="PRESENT",
         scanned_via="MOBILE_APP"
@@ -95,9 +114,90 @@ def scan_qr_attendance(
     db.refresh(record)
     
     # Schedule random check for later today
-    schedule_random_check(doctor_id, session.id)
+    schedule_random_check(req.doctor_id, session.id)
     
     return {"message": "Attendance recorded successfully"}
+
+@router.get("/doctor/dashboard")
+def get_doctor_dashboard(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(get_current_user)
+):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id, Doctor.hospital_id == hospital_id).first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+    # Fetch last 30 days history
+    thirty_days_ago = date.today() - timedelta(days=30)
+    sessions = db.query(DailyQRSession).filter(DailyQRSession.hospital_id == hospital_id, DailyQRSession.date >= thirty_days_ago).all()
+    session_ids = [s.id for s in sessions]
+    
+    records = db.query(AttendanceRecord).filter(
+        AttendanceRecord.doctor_id == doctor_id,
+        AttendanceRecord.session_id.in_(session_ids)
+    ).all()
+    
+    record_map = {r.session_id: r for r in records}
+    
+    history = []
+    present_count = 0
+    late_count = 0
+    leaves_taken = 0
+    
+    # Sort sessions newest first
+    sessions.sort(key=lambda x: x.date, reverse=True)
+    
+    current_streak = 0
+    counting_streak = True
+    
+    for s in sessions:
+        r = record_map.get(s.id)
+        status = "Absent"
+        if r:
+            status = r.status
+            if status == "PRESENT":
+                present_count += 1
+                if counting_streak:
+                    current_streak += 1
+            elif status == "LATE":
+                late_count += 1
+                if counting_streak:
+                    current_streak += 1
+            elif status == "LEAVE":
+                leaves_taken += 1
+                counting_streak = False
+        else:
+            if s.date < date.today():
+                counting_streak = False
+        
+        history.append({
+            "date": s.date.isoformat(),
+            "status": status.capitalize(),
+            "check_in": r.timestamp.isoformat() if r and r.timestamp else None,
+            "gps_verified": True if r and r.scanned_via == "MOBILE_APP" else False,
+            "qr_scanned": True if r and r.scanned_via == "MOBILE_APP" else False,
+        })
+
+    attendance_percentage = 0
+    if len(sessions) > 0:
+        attendance_percentage = int(((present_count + late_count) / len(sessions)) * 100)
+    
+    return {
+        "doctor": {
+            "name": doctor.name,
+            "specialization": doctor.specialization or "General",
+            "calendar_linked": False
+        },
+        "stats": {
+            "attendance_percentage": attendance_percentage,
+            "streak": current_streak,
+            "late_count": late_count,
+            "leaves_taken": leaves_taken
+        },
+        "history": history
+    }
 
 @router.get("/dashboard")
 def get_attendance_dashboard(

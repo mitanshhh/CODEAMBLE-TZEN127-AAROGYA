@@ -85,11 +85,11 @@ export function BedTable({ beds, onAdmit, onDischarge, onStatusChange, onEdit }:
                 </TableCell>
                 <TableCell className="text-right space-x-2">
                   {onEdit && (
-                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onEdit(bed); }}>
+                    <Button variant="ghost" size="sm" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); onEdit(bed); }}>
                       Edit
                     </Button>
                   )}
-                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedBed(bed); }}>
+                  <Button variant="outline" size="sm" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectedBed(bed); }}>
                     Details
                   </Button>
                 </TableCell>

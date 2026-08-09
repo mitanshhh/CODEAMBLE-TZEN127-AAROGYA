@@ -26,14 +26,10 @@ export default function DistrictAdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem("token") || "mock_token";
-      const role = localStorage.getItem("role") || "DISTRICT_ADMIN";
-      const opts = { headers: { "Authorization": `Bearer ${token}`, "X-Role": role } };
-      
       const [resOverview, resReq, resMap] = await Promise.all([
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/overview`, opts),
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/requests`, opts),
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/map-data`, opts)
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/overview`),
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/requests`),
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/map-data`)
       ]);
       
       if(resOverview.ok) setOverview(await resOverview.json());
@@ -54,11 +50,9 @@ export default function DistrictAdminDashboard() {
   const handleApprove = async () => {
     if(!selectedReq) return;
     try {
-      const token = localStorage.getItem("token") || "mock_token";
-      const role = localStorage.getItem("role") || "DISTRICT_ADMIN";
       const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/resource-request/${selectedReq.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-Role": role },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "APPROVED", admin_note: customReply })
       });
       if(res.ok) {
@@ -78,11 +72,9 @@ export default function DistrictAdminDashboard() {
   const handleReject = async () => {
     if(!selectedReq) return;
     try {
-      const token = localStorage.getItem("token") || "mock_token";
-      const role = localStorage.getItem("role") || "DISTRICT_ADMIN";
       const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/district/resource-request/${selectedReq.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-Role": role },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "REJECTED", admin_note: customReply })
       });
       if(res.ok) {
@@ -171,10 +163,10 @@ export default function DistrictAdminDashboard() {
           <p className="text-sm text-muted-foreground mt-1">Live operational status and resource allocation.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="secondary" className="flex items-center gap-2" onClick={() => setIsRegisterOpen(true)}>
+          <Button variant="secondary" className="flex items-center gap-2 cursor-pointer" onClick={() => setIsRegisterOpen(true)}>
             <Building2 className="w-4 h-4" /> Register New PHC
           </Button>
-          <Button className="flex items-center gap-2">
+          <Button className="flex items-center gap-2 cursor-pointer">
             <Download className="w-4 h-4" /> Export Report
           </Button>
         </div>
@@ -235,7 +227,7 @@ export default function DistrictAdminDashboard() {
                     <div key={req.id} onClick={() => setSelectedReq(req)} className="bg-muted/30 rounded-lg p-3 border border-border cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
                       <div className="flex justify-between items-start mb-1">
                         <h4 className="text-sm font-semibold text-foreground">Request: {req.resource_name}</h4>
-                        <span className="text-[10px] text-muted-foreground bg-white px-1.5 py-0.5 rounded border border-border">{new Date(req.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <span className="text-[10px] text-muted-foreground bg-white px-1.5 py-0.5 rounded border border-border">{new Date(req.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">From PHC ID: {req.requesting_phc_id}</p>
                       <p className="text-xs text-foreground/80 line-clamp-2">{req.message}</p>

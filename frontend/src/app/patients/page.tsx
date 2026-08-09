@@ -34,7 +34,8 @@ export default function PatientsPage() {
     age: "",
     gender: "",
     contact: "",
-    medical_history: ""
+    medical_history: "",
+    status: ""
   });
   const [role, setRole] = useState("DEVELOPER");
   
@@ -44,7 +45,7 @@ export default function PatientsPage() {
     setLoading(true);
     try {
       // Fetch patients
-      const pRes = await apiFetch(`${API_BASE_URL}/api/v1/patients/`);
+      const pRes = await apiFetch(`${API_BASE_URL}/api/v1/patients`);
       if (pRes.ok) {
         const pData = await pRes.json();
         setPatients(pData.data || []);
@@ -73,7 +74,7 @@ export default function PatientsPage() {
 
   const handleRegisterPatient = async (data: any) => {
     try {
-      const res = await apiFetch(`${API_BASE_URL}/api/v1/patients/`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/v1/patients`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...data })
@@ -132,7 +133,8 @@ export default function PatientsPage() {
           age: parseInt(editFormData.age) || 0,
           gender: editFormData.gender,
           contact: editFormData.contact,
-          medical_history: editFormData.medical_history
+          medical_history: editFormData.medical_history,
+          status: editFormData.status
         })
       });
       
@@ -156,7 +158,8 @@ export default function PatientsPage() {
       age: patient.age?.toString() || "",
       gender: patient.gender || "",
       contact: patient.contact || "",
-      medical_history: patient.medical_history || ""
+      medical_history: patient.medical_history || "",
+      status: patient.status || ""
     });
     setIsEditingPatient(true);
   };
@@ -188,12 +191,12 @@ export default function PatientsPage() {
           <p className="text-muted-foreground mt-1">Manage patient footfall, triage, and department loads.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={fetchData} disabled={loading} className="gap-2">
+          <Button variant="outline" onClick={fetchData} disabled={loading} className="gap-2 cursor-pointer">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           {(role === "PHC_STAFF" || role === "DEVELOPER" || role === "MEDICAL_OFFICER") && (
-            <Button onClick={() => setIsFormOpen(true)} className="gap-2 shadow-lg shadow-primary/20">
+            <Button onClick={() => setIsFormOpen(true)} className="gap-2 shadow-lg shadow-primary/20 cursor-pointer">
               <Plus className="w-4 h-4" />
               New Patient
             </Button>
@@ -279,7 +282,7 @@ export default function PatientsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground font-medium">
-                      {p.admitted_at ? new Date(p.admitted_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute:'2-digit' }) : '--:--'}
+                      {p.admitted_at ? new Date(p.admitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' }) : '--:--'}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -374,7 +377,7 @@ export default function PatientsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="gender">Gender</Label>
-                <Select value={editFormData.gender} onValueChange={(v) => setEditFormData({...editFormData, gender: v})}>
+                <Select value={editFormData.gender || ""} onValueChange={(v) => setEditFormData({...editFormData, gender: v || ""})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
@@ -382,6 +385,23 @@ export default function PatientsPage() {
                     <SelectItem value="Male">Male</SelectItem>
                     <SelectItem value="Female">Female</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={editFormData.status || ""} onValueChange={(v) => setEditFormData({...editFormData, status: v || ""})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Outpatient">Outpatient</SelectItem>
+                    <SelectItem value="Waiting">Waiting</SelectItem>
+                    <SelectItem value="Consultation">Consultation</SelectItem>
+                    <SelectItem value="Checkup">Checkup</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Admitted">Admitted</SelectItem>
+                    <SelectItem value="Discharged">Discharged</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

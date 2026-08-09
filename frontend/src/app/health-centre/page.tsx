@@ -47,6 +47,13 @@ interface HealthCentre {
   location: string;
   medical_officer: string;
   status: string;
+  total_beds?: number;
+  available_beds?: number;
+  total_staff?: number;
+  latitude?: number;
+  longitude?: number;
+  contact_number?: string;
+  email?: string | null;
   email_sent?: boolean;
   email_detail?: string | null;
 }
@@ -270,7 +277,7 @@ export default function HealthCentreManagement() {
         {/* Register Dialog */}
         <Dialog open={isRegisterOpen} onOpenChange={setIsRegisterOpen}>
           <DialogTrigger render={
-            <Button className="flex items-center gap-2 shadow-sm">
+            <Button className="flex items-center gap-2 shadow-sm cursor-pointer">
               <Plus className="w-4 h-4" />
               Register New PHC
             </Button>

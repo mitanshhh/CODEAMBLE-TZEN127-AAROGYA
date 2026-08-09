@@ -65,7 +65,7 @@ export default function ReportsDashboard() {
         </div>
         <div className="flex gap-2">
           <Button 
-            className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-semibold px-6 shadow-md transition-transform active:scale-95"
+            className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-semibold px-6 shadow-md transition-transform active:scale-95 cursor-pointer"
             onClick={handleGenerateReport}
             disabled={generating}
           >

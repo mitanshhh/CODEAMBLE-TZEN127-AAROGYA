@@ -19,3 +19,9 @@ class AttendanceRecordResponse(BaseModel):
     scanned_via: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+class QRScanRequest(BaseModel):
+    qr_token: str
+    lat: float
+    lng: float
+    doctor_id: int

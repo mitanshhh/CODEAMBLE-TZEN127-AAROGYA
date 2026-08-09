@@ -53,8 +53,15 @@ def get_district_overview(
     # Medicine alerts: items where quantity is at or below threshold
     medicine_alerts = db.query(InventoryItem).filter(InventoryItem.quantity <= InventoryItem.min_threshold).count()
     
-    # Critical centres: health_score < 50 or 0 available beds
-    critical_centres = db.query(HealthCentre).filter(HealthCentre.available_beds == 0, HealthCentre.total_beds > 0).count()
+    # Critical centres: status == 'Critical' or health_score < 50 or 0 available beds
+    from sqlalchemy import or_
+    critical_centres = db.query(HealthCentre).filter(
+        or_(
+            HealthCentre.status == "Critical",
+            HealthCentre.health_score < 50,
+            (HealthCentre.available_beds == 0) & (HealthCentre.total_beds > 0)
+        )
+    ).count()
     
     # Doctor presence rate (today)
     today = datetime.now().date()

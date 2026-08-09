@@ -154,7 +154,7 @@ export default function DistrictReportsDashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-muted-foreground">
-                        {new Date(report.created_at).toLocaleDateString()}
+                        {new Date(report.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
                       </td>
                       <td className="px-6 py-4">
                         <span className="flex items-center gap-1 text-green-600 text-xs font-medium">

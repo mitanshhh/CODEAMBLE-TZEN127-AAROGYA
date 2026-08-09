@@ -43,6 +43,7 @@ interface InventoryItem {
   qty_sold: number;
   min_threshold: number;
   price: number;
+  quantity?: number;
   forecast_days?: string;
   status: string;
 }
@@ -545,11 +546,11 @@ export default function InventoryManagement() {
             </div>
             <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100">
               <p className="text-[10px] uppercase tracking-wider text-blue-700 font-semibold mb-1">Monthly Consumed</p>
-              <p className="text-lg font-bold text-blue-900">{analytics?.monthly_consumption.toLocaleString() || '0'}</p>
+              <p className="text-lg font-bold text-blue-900">{analytics?.monthly_consumption.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) || '0'}</p>
             </div>
             <div className="bg-green-50/50 p-3 rounded-lg border border-green-100">
               <p className="text-[10px] uppercase tracking-wider text-green-700 font-semibold mb-1">Weekly Restock</p>
-              <p className="text-lg font-bold text-green-900">{analytics?.weekly_restocking.toLocaleString() || '0'}</p>
+              <p className="text-lg font-bold text-green-900">{analytics?.weekly_restocking.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) || '0'}</p>
             </div>
           </div>
 
@@ -756,7 +757,7 @@ export default function InventoryManagement() {
                   </div>
                   <div className="text-right flex items-center gap-2">
                     <span className="text-sm text-muted-foreground font-medium uppercase">Total</span>
-                    <span className="text-xl font-bold text-primary">₹{billTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span className="text-xl font-bold text-primary">₹{billTotal.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
                 </div>
                 <Button 
@@ -973,7 +974,7 @@ export default function InventoryManagement() {
                         {log.reason && <> &bull; {log.reason}</>}
                       </p>
                       <p className="text-[11px] text-muted-foreground/70 mt-1">
-                        {new Date(log.timestamp).toLocaleString(undefined, {
+                        {new Date(log.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', 
                           dateStyle: 'medium',
                           timeStyle: 'short'
                         })}
@@ -1024,14 +1025,14 @@ export default function InventoryManagement() {
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <span className="text-sm text-muted-foreground">Requested On</span>
                 <span className="text-sm text-foreground">
-                  {new Date(selectedRequestDetails.created_at).toLocaleString()}
+                  {new Date(selectedRequestDetails.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                 </span>
               </div>
               {selectedRequestDetails.updated_at && (
                 <div className="flex items-center justify-between border-b border-border pb-3">
                   <span className="text-sm text-muted-foreground">Actioned On</span>
                   <span className="text-sm text-foreground">
-                    {new Date(selectedRequestDetails.updated_at).toLocaleString()}
+                    {new Date(selectedRequestDetails.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                   </span>
                 </div>
               )}

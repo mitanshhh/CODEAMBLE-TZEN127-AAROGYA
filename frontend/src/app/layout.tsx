@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   title: "Aarogya",
   description: "High-stakes healthcare operations dashboard",
   icons: {
-    icon: "/aarogya_logo.png",
+    icon: "/logo.png",
   },
 };
 

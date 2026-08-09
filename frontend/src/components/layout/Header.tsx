@@ -204,7 +204,7 @@ export function Header({ setIsMobileOpen }: HeaderProps) {
                     {!n.is_read && <span className="w-2 h-2 rounded-full bg-primary mt-1"></span>}
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-1">{n.message}</p>
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">{new Date(n.timestamp).toLocaleTimeString()}</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">{new Date(n.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
                 </div>
               ))
             )}
@@ -255,7 +255,7 @@ export function Header({ setIsMobileOpen }: HeaderProps) {
           <DialogHeader>
             <DialogTitle>{selectedNotification?.title}</DialogTitle>
             <DialogDescription>
-              {selectedNotification && new Date(selectedNotification.timestamp).toLocaleString()}
+              {selectedNotification && new Date(selectedNotification.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

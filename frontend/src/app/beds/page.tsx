@@ -49,7 +49,7 @@ export default function BedManagement() {
 
   const fetchBeds = async () => {
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/?hospital_id=${selectedHospitalId || ''}`);
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds`);
       if (!res.ok) throw new Error("Failed to fetch beds");
       const data = await res.json();
       setBeds(data.data || []);
@@ -60,7 +60,7 @@ export default function BedManagement() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/analytics?hospital_id=${selectedHospitalId || ''}`);
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/beds/analytics`);
       if (!res.ok) throw new Error("Failed to fetch analytics");
       const data = await res.json();
       setAnalytics(data);
@@ -244,11 +244,11 @@ export default function BedManagement() {
         </div>
         <div className="flex gap-2">
           {canManage && (
-            <Button size="sm" onClick={() => setIsAddDialogOpen(true)} className="gap-2">
+            <Button size="sm" onClick={() => setIsAddDialogOpen(true)} className="gap-2 cursor-pointer">
               <Plus className="w-4 h-4" /> Add Bed
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-2">
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-2 cursor-pointer">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>

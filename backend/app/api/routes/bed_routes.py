@@ -22,7 +22,7 @@ def log_audit(db: Session, patient_id: int, user_id: int, action: str, details: 
     db.add(audit)
     db.commit()
 
-@router.get("/", response_model=PaginatedResponse[BedResponse])
+@router.get("", response_model=PaginatedResponse[BedResponse])
 def get_beds(
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
@@ -44,7 +44,7 @@ def get_beds(
         offset=offset
     )
 
-@router.post("/", response_model=BedResponse)
+@router.post("", response_model=BedResponse)
 def create_bed(
     bed_in: BedCreate,
     db: Session = Depends(get_db),

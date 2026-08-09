@@ -19,7 +19,7 @@ def log_audit(db: Session, patient_id: int, user_id: int, action: str, details: 
     db.add(audit)
     db.commit()
 
-@router.get("/", response_model=PaginatedResponse[PatientResponse])
+@router.get("", response_model=PaginatedResponse[PatientResponse])
 def get_patients(
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
@@ -32,6 +32,7 @@ def get_patients(
     if status:
         query = query.filter(Patient.status == status)
     
+    query = query.order_by(Patient.admitted_at.desc())
     total = query.count()
     patients = query.offset(offset).limit(limit).all()
     
@@ -84,15 +85,20 @@ def get_patient_doctors(
     hospital_id: int = Depends(resolve_hospital_id),
     current_user: User = Depends(get_current_user)
 ):
-    # Return mock doctors since we don't have a staff route implemented yet
+    from app.models.attendance import Doctor
+    doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
+    
     return [
-        {"id": 1, "name": "Dr. Smith", "specialization": "General Physician"},
-        {"id": 2, "name": "Dr. Jones", "specialization": "Pediatrician"},
-        {"id": 3, "name": "Dr. Davis", "specialization": "Cardiologist"}
+        {
+            "id": doc.id,
+            "name": doc.name,
+            "specialization": doc.specialization,
+            "user_id": doc.user_id,
+            "calendar_linked": False # Mock for now
+        } for doc in doctors
     ]
 
-
-@router.post("/", response_model=PatientResponse)
+@router.post("", response_model=PatientResponse)
 def register_patient(
     patient_in: PatientCreate,
     db: Session = Depends(get_db),

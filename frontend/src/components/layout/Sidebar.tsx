@@ -47,14 +47,16 @@ export function Sidebar({ isCollapsed = false, setIsCollapsed, isMobileOpen = fa
       ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`
     }>
       <div className={`px-4 mb-6 mt-2 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-        {!isCollapsed && <h1 className="text-2xl font-bold text-foreground ml-2">Aarogya</h1>}
-        {isCollapsed && <h1 className="text-xl font-bold text-primary hidden">A</h1>}
+        <div className="flex items-center gap-2.5">
+          <img src="/logo.png" alt="Aarogya Logo" className="w-8 h-8 object-contain shrink-0" />
+          {!isCollapsed && <h1 className="text-2xl font-bold text-foreground tracking-tight">Aarogya</h1>}
+        </div>
         
         {setIsCollapsed && (
           <Button 
             variant="ghost" 
             size="icon" 
-            className="hidden md:flex text-muted-foreground hover:text-foreground hover:bg-muted/80"
+            className="hidden md:flex cursor-pointer text-muted-foreground hover:text-foreground hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
             onClick={() => setIsCollapsed(!isCollapsed)}
           >
             {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
@@ -72,10 +74,10 @@ export function Sidebar({ isCollapsed = false, setIsCollapsed, isMobileOpen = fa
               key={item.href}
               href={item.href} 
               onClick={() => { if (setIsMobileOpen) setIsMobileOpen(false); }}
-              className={`flex items-center gap-3 py-3 rounded-xl transition-all duration-300 font-medium text-sm group relative overflow-hidden ${isCollapsed ? 'justify-center px-0' : 'px-4'} ${
+              className={`flex items-center gap-3 py-3 rounded-xl transition-all duration-200 font-medium text-sm group relative overflow-hidden cursor-pointer ${isCollapsed ? 'justify-center px-0' : 'px-4'} ${
                 isActive 
-                  ? 'text-primary-foreground shadow-[0_4px_12px_rgba(37,52,63,0.15)]' 
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
+                  ? 'text-primary-foreground font-bold shadow-[0_4px_12px_rgba(37,52,63,0.15)]' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-slate-200/90 dark:hover:bg-slate-800/90 hover:font-semibold'
               }`}
             >
               {isActive && (
