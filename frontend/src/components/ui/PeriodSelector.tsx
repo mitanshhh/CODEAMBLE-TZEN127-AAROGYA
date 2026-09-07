@@ -32,7 +32,7 @@ export function PeriodSelector({
 
   return (
     <div className="flex flex-col gap-1">
-      <Select value={value} onValueChange={handleValueChange}>
+      <Select value={value} onValueChange={(val) => handleValueChange(val || '')}>
         <SelectTrigger className="w-[200px] bg-white border-slate-200 text-slate-700 shadow-sm font-medium hover:bg-slate-50 transition-colors focus:ring-blue-500 rounded-lg">
           <SelectValue placeholder="Select Period" />
         </SelectTrigger>
