@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, Query
+from typing import Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, desc, asc
 from app.db.database import get_db
 from app.models.health_centre import HealthCentre
 from app.models.user import User, UserRole
@@ -8,6 +9,7 @@ from app.schemas.health_centre import HealthCentreCreateResponse, HealthCentreRe
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
 from app.core.security import get_password_hash
 from app.services.email_service import send_onboarding_email
+from app.services.health_score import calculate_health_score
 import secrets
 
 router = APIRouter()
@@ -40,14 +42,72 @@ def update_my_centre(
     db.refresh(hc)
     return hc
 
-@router.get("/", response_model=list[HealthCentreResponse])
+@router.get("", response_model=list[HealthCentreResponse])
 def get_all_centres(
+    response: Response,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    search: Optional[str] = None,
+    type: Optional[str] = None,
+    location: Optional[str] = None,
+    status: Optional[str] = None,
+    min_score: Optional[int] = None,
+    max_score: Optional[int] = None,
+    sort_by: Optional[str] = "id",
+    sort_desc: bool = False,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000)
 ):
-    return db.query(HealthCentre).all()
+    query = db.query(HealthCentre)
+    
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            or_(
+                HealthCentre.name.ilike(search_filter),
+                HealthCentre.location.ilike(search_filter),
+                HealthCentre.district.ilike(search_filter),
+                HealthCentre.medical_officer.ilike(search_filter)
+            )
+        )
+    
+    if type and type != "All Types":
+        query = query.filter(HealthCentre.type == type)
+    if location and location != "All Districts":
+        # using ilike for generic matching or exact match if preferred
+        query = query.filter(or_(HealthCentre.location == location, HealthCentre.district == location))
+    if status and status != "All Statuses":
+        query = query.filter(HealthCentre.status.ilike(status))
+    
+    if min_score is not None:
+        query = query.filter(HealthCentre.health_score >= min_score)
+    if max_score is not None:
+        query = query.filter(HealthCentre.health_score <= max_score)
+        
+    total_count = query.count()
+    
+    if sort_by and hasattr(HealthCentre, sort_by):
+        column = getattr(HealthCentre, sort_by)
+        if sort_desc:
+            query = query.order_by(desc(column))
+        else:
+            query = query.order_by(asc(column))
+    else:
+        query = query.order_by(HealthCentre.id)
+        
+    centres = query.offset(skip).limit(limit).all()
+    
+    # Calculate live health score
+    for c in centres:
+        c.health_score = int(calculate_health_score(db, c.id))
+    
+    response.headers["X-Total-Count"] = str(total_count)
+    # Allows frontend to read the custom header in CORS if applicable (assuming CORS config allows it or they are same-origin)
+    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
+    
+    return centres
 
-@router.post("/", response_model=HealthCentreCreateResponse)
+@router.post("", response_model=HealthCentreCreateResponse)
 def create_centre(
     centre_data: HealthCentreBase,
     db: Session = Depends(get_db),

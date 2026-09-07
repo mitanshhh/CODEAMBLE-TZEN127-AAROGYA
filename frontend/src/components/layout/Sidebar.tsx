@@ -30,7 +30,6 @@ export function Sidebar({ isCollapsed = false, setIsCollapsed, isMobileOpen = fa
     { name: t('nav.patients'),        href: '/patients',       icon: Users },
     { name: t('nav.beds'),            href: '/beds',           icon: BedDouble },
     { name: t('nav.analytics'),       href: '/analytics',      icon: LineChart },
-    { name: t('nav.aiReports'),       href: '/ai-audit',       icon: FileText },
     { name: t('nav.manageRoles'),     href: '/manage-roles',   icon: Building2 },
   ];
 

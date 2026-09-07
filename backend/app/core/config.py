@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
     

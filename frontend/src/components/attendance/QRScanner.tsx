@@ -66,12 +66,11 @@ export default function QRScanner({ doctorId, onScanSuccess }: QRScannerProps) {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          const authToken = localStorage.getItem("token") || "mock_token";
-          const role = localStorage.getItem("role") || "PHC_STAFF";
+          const role = localStorage.getItem("role") || "DOCTOR";
           
           const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/scan`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`, 'X-Role': role },
+            headers: { 'Content-Type': 'application/json', 'X-Role': role },
             body: JSON.stringify({
               qr_token: qrToken,
               lat: latitude,

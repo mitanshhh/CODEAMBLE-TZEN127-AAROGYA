@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Date, DateTime, ForeignKey, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -27,6 +27,8 @@ class DailyQRSession(Base):
     date = Column(Date, nullable=False, index=True)
     qr_token = Column(String, unique=True, nullable=False, index=True)
     is_active = Column(Boolean, default=True)
+    device_lat = Column(Float, nullable=True)
+    device_lng = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

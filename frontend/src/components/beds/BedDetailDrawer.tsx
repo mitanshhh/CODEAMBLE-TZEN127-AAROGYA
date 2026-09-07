@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Bed, User, Clock, CheckCircle2, UserPlus, LogOut, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { PatientSearchInput } from "../patients/PatientSearchInput";
 
 export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge, onStatusChange }: any) {
   const { user } = useAuth();
-  const allowedRoles = ["DISTRICT_ADMIN", "MEDICAL_OFFICER", "PHC_STAFF", "RECEPTIONIST", "DATA_ENTRY", "DEVELOPER"];
+  const allowedRoles = ["MEDICAL_OFFICER", "PHC_STAFF", "RECEPTIONIST", "DATA_ENTRY", "DEVELOPER"];
   const canManage = user?.role && allowedRoles.includes(user.role);
   
   const [patientName, setPatientName] = useState("");
@@ -19,6 +20,7 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
   const [admissionReason, setAdmissionReason] = useState("");
   const [days, setDays] = useState("3");
   const [loading, setLoading] = useState(false);
+  const [isPatientLocked, setIsPatientLocked] = useState(false);
 
   if (!bed) return null;
 
@@ -27,6 +29,7 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
     setLoading(true);
     await onAdmit(bed.id, patientName, patientPhone, admissionReason, parseInt(days), action, patientCode);
     setLoading(false);
+    setIsPatientLocked(false);
     onOpenChange(false);
   };
 
@@ -142,27 +145,47 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
               </h3>
               <div className="space-y-4 pt-1 text-sm">
                 <div className="space-y-2">
-                  <Label>Patient ID / ABHA ID <span className="text-xs text-muted-foreground font-normal">(Optional)</span></Label>
-                  <Input 
-                    placeholder="e.g. PT-0001 or ABHA-1234 (Links existing patient)" 
-                    value={patientCode}
-                    onChange={e => setPatientCode(e.target.value)}
+                  <Label>Patient ID / ABHA ID</Label>
+                  <PatientSearchInput 
+                    onPatientFound={(patient) => {
+                      setPatientCode(patient.patient_code || '');
+                      setPatientName(patient.name || '');
+                      setPatientPhone(patient.contact || '');
+                      setIsPatientLocked(true);
+                    }}
+                    disabled={loading || isPatientLocked}
                   />
+                  {isPatientLocked && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      className="w-fit text-xs h-6 px-2 mt-1" 
+                      onClick={() => {
+                        setIsPatientLocked(false);
+                        setPatientCode('');
+                        setPatientName('');
+                        setPatientPhone('');
+                      }}
+                    >
+                      Clear Patient
+                    </Button>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Patient Name</Label>
                   <Input 
-                    placeholder="Enter patient's full name" 
                     value={patientName}
                     onChange={e => setPatientName(e.target.value)}
+                    disabled={isPatientLocked}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Phone Number (Optional)</Label>
                   <Input 
-                    placeholder="e.g. +91 98765 43210" 
                     value={patientPhone}
                     onChange={e => setPatientPhone(e.target.value)}
+                    disabled={isPatientLocked}
                   />
                 </div>
                 <div className="space-y-2">
@@ -183,14 +206,16 @@ export function BedDetailDrawer({ bed, open, onOpenChange, onAdmit, onDischarge,
                   />
                 </div>
               </div>
-              <div className="pt-4 mt-2 flex items-center justify-end gap-2">
-                <Button variant="outline" size="sm" className="rounded-full px-4 transition-transform active:scale-95 cursor-pointer hover:bg-muted" onClick={() => onOpenChange(false)}>Cancel</Button>
-                <Button variant="secondary" size="sm" className="rounded-full px-4 font-semibold transition-transform active:scale-95 cursor-pointer" onClick={() => handleAdmit('Reserve')} disabled={loading}>
-                  Reserve
-                </Button>
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 gap-2 text-white rounded-full px-4 font-semibold transition-transform active:scale-95 cursor-pointer" onClick={() => handleAdmit('Admit')} disabled={loading}>
-                  <UserPlus className="w-3.5 h-3.5" /> Admit Patient
-                </Button>
+              <div className="pt-4 mt-2 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700 gap-2 text-white rounded-full font-semibold transition-transform active:scale-95 cursor-pointer" onClick={() => handleAdmit('Admit')} disabled={loading}>
+                    <UserPlus className="w-3.5 h-3.5" /> Admit Patient
+                  </Button>
+                  <Button variant="secondary" size="sm" className="flex-1 rounded-full font-semibold transition-transform active:scale-95 cursor-pointer" onClick={() => handleAdmit('Reserve')} disabled={loading}>
+                    Reserve
+                  </Button>
+                </div>
+                <Button variant="outline" size="sm" className="w-full rounded-full transition-transform active:scale-95 cursor-pointer hover:bg-muted" onClick={() => onOpenChange(false)}>Cancel</Button>
               </div>
             </div>
           ) : (

@@ -5,6 +5,8 @@ from app.models.attendance import DailyQRSession, AttendanceRecord, Doctor
 from app.models.bed import Bed
 from datetime import date
 
+from app.utils.date_utils import get_now_ist
+
 def calculate_health_score(db: Session, hospital_id: int) -> float:
     score = 100.0
     
@@ -28,7 +30,7 @@ def calculate_health_score(db: Session, hospital_id: int) -> float:
         score -= (low_stock_ratio * 100 * 0.3)
         
     # 3. Staff Attendance Rate (25% weight)
-    today = date.today()
+    today = get_now_ist().date()
     session = db.query(DailyQRSession).filter(DailyQRSession.hospital_id == hospital_id, DailyQRSession.date == today).first()
     total_doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).count()
     

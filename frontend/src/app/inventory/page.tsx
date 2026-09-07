@@ -1,5 +1,5 @@
 "use client";
-import { apiFetch } from '@/lib/api';
+import { apiFetch, API_BASE_URL } from '@/lib/api';
 
 import { useState, useEffect, useRef } from 'react';
 import { History, Plus, Sparkles, Filter, MoreVertical, Loader2, Minus, Search, Upload, TrendingUp, TrendingDown, Package, Activity, Bot, FileText, Trash2 } from 'lucide-react';
@@ -34,6 +34,8 @@ import {
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
 import ReactMarkdown from 'react-markdown';
+import { PeriodSelector } from "@/components/ui/PeriodSelector";
+import { PeriodOption, getPeriodRange, DateRange, formatExactTimestamp } from "@/lib/dateUtils";
 
 // Type definitions
 interface InventoryItem {
@@ -61,8 +63,8 @@ interface InventoryLog {
 interface Analytics {
   most_used: string;
   least_used: string;
-  monthly_consumption: number;
-  weekly_restocking: number;
+  period_consumption: number;
+  period_restocking: number;
   fastest_moving: {name: string, sold: number}[];
   slowest_moving: {name: string, sold: number}[];
 }
@@ -96,6 +98,11 @@ export default function InventoryManagement() {
   const [aiLoading, setAiLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const [period, setPeriod] = useState<PeriodOption>('This Month');
+  const [dateRange, setDateRange] = useState<DateRange>(getPeriodRange('This Month'));
+  const [alertTab, setAlertTab] = useState<'pending' | 'reviewed'>('pending');
+  const [restockSearch, setRestockSearch] = useState("");
 
   // Modals state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -155,19 +162,55 @@ export default function InventoryManagement() {
         setItems(mappedItems);
         setLogs(logsData.data || []);
         
-        // Mock analytics data for now since backend endpoint doesn't exist
+        const actualLogs = logsData.data || [];
+        
+        const itemDispenseCounts: Record<string, number> = {};
+        let periodConsumption = 0;
+        let periodRestocking = 0;
+        const periodStart = dateRange.start;
+        const periodEnd = dateRange.end;
+
+        mappedItems.forEach((item: any) => {
+          itemDispenseCounts[item.name] = 0;
+        });
+
+        actualLogs.forEach((log: any) => {
+          const logDate = new Date(log.timestamp);
+          
+          if (logDate >= periodStart && logDate <= periodEnd) {
+            if (log.change_type === 'DISPENSE') {
+              itemDispenseCounts[log.item_name] = (itemDispenseCounts[log.item_name] || 0) + log.change_amount;
+              periodConsumption += log.change_amount;
+            } else if (log.change_type === 'RESTOCK') {
+              periodRestocking += log.change_amount;
+            }
+          } else if (log.change_type === 'DISPENSE') {
+            // Still count it towards all-time most used if needed? 
+            // Wait, maybe we only want period-specific top movers? Let's make it period specific.
+            // So we only count if it's within the period!
+            // Which means the above block correctly adds to itemDispenseCounts only if within period.
+          }
+        });
+        
+        const sortedItems = Object.entries(itemDispenseCounts).sort((a: any, b: any) => b[1] - a[1]);
+        const mostUsed = sortedItems.length > 0 ? sortedItems[0][0] : "N/A";
+        const leastUsed = sortedItems.length > 0 ? sortedItems[sortedItems.length - 1][0] : "N/A";
+        
+        const fastestMoving = sortedItems.slice(0, 3).map((i: any) => ({ name: i[0], sold: i[1] }));
+        const slowestMoving = sortedItems.slice(-3).reverse().map((i: any) => ({ name: i[0], sold: i[1] }));
+        
         setAnalytics({
-          most_used: "Paracetamol 500mg",
-          least_used: "Amoxicillin 250mg",
-          monthly_consumption: 450,
-          weekly_restocking: 20,
-          fastest_moving: [],
-          slowest_moving: []
+          most_used: mostUsed,
+          least_used: leastUsed,
+          period_consumption: periodConsumption,
+          period_restocking: periodRestocking,
+          fastest_moving: fastestMoving,
+          slowest_moving: slowestMoving
         });
 
         if(requestsRes.ok) setRequests(await requestsRes.json());
         
-        const phcRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/phc/`);
+        const phcRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/phc`);
         if (phcRes.ok) {
           const phcs = await phcRes.json();
           const currentPhc = phcs.find((p: any) => p.id === selectedHospitalId);
@@ -198,7 +241,7 @@ export default function InventoryManagement() {
         console.error("Failed to parse saved AI analysis");
       }
     }
-  }, [user, selectedHospitalId]);
+  }, [user, selectedHospitalId, dateRange]);
 
   useEffect(() => {
     setItems(current => current.map(item => {
@@ -242,11 +285,10 @@ export default function InventoryManagement() {
 
   const sendRequest = async (draft: DraftRequest) => {
     try {
-      const token = localStorage.getItem("token") || "mock_token";
       const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
       const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/requests${hospitalQuery}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item_name: draft.item_name, message: draft.draft_message })
       });
       if (res.ok) {
@@ -358,6 +400,16 @@ export default function InventoryManagement() {
     }
   };
 
+  const handleQuantityClick = (item: InventoryItem, delta: number) => {
+    if (user?.role === 'DISTRICT_ADMIN') {
+      toast.error("Access Denied: District Admins cannot modify bills or dispense medicines.", {
+        description: "Your role is view-only for operational data."
+      });
+      return;
+    }
+    updateQuantitySold(item, delta);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -368,7 +420,7 @@ export default function InventoryManagement() {
     const loadingToast = toast.loading("Uploading CSV...");
     try {
       const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/inventory/upload-csv${hospitalQuery}`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/v1/inventory/upload-csv${hospitalQuery}`, {
         method: 'POST',
         headers: { 'X-Role': 'DISTRICT_ADMIN' },
         body: formData
@@ -379,7 +431,8 @@ export default function InventoryManagement() {
         toast.success(data.message, { id: loadingToast });
         fetchAllData();
       } else {
-        toast.error("Bulk upload failed", { id: loadingToast });
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.detail || "Bulk upload failed", { id: loadingToast });
       }
     } catch (err) {
       toast.error("Network error during upload", { id: loadingToast });
@@ -389,70 +442,149 @@ export default function InventoryManagement() {
   };
 
   const getStatusBadge = (item: InventoryItem) => {
-    const available = item.total_qty || item.quantity || 0; // Use quantity from backend if total_qty missing
+    const available = item.total_qty || item.quantity || 0;
     const qty_sold = item.qty_sold || 0;
     const min_thresh = item.min_threshold || 0;
-    if ((available - qty_sold) < min_thresh) {
+    const currentStock = available - qty_sold;
+    
+    if (currentStock < min_thresh) {
       return <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200">Critical</Badge>;
     }
-    if ((available - qty_sold) < min_thresh * 1.5) {
-      return <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200">Low</Badge>;
+    if (currentStock < min_thresh * 1.5) {
+      return <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200">Low Stock</Badge>;
     }
-    return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Stable</Badge>;
+    if (currentStock <= min_thresh + 50) {
+      return <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">Sufficient</Badge>;
+    }
+    return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Optimal</Badge>;
   };
 
   const criticalMeds = items.filter(item => {
     const available = item.total_qty || item.quantity || 0;
     const qty_sold = item.qty_sold || 0;
     const min_thresh = item.min_threshold || 0;
-    return (available - qty_sold) <= (min_thresh + 50);
+    return (available - qty_sold) <= min_thresh;
   });
-  const localRequests = criticalMeds.map(m => {
-    const available = m.total_qty || m.quantity || 0;
-    const qty_sold = m.qty_sold || 0;
-    const min_thresh = m.min_threshold || 0;
-    return { 
-      item_name: m.name, 
-      draft_message: `Urgent: Stock for ${m.name} is critically low (Available: ${available - qty_sold}, Min: ${min_thresh}). Please approve an emergency restock.` 
-    }
+
+  const lowStockMeds = items.filter(item => {
+    const available = item.total_qty || item.quantity || 0;
+    const qty_sold = item.qty_sold || 0;
+    const min_thresh = item.min_threshold || 0;
+    const currentStock = available - qty_sold;
+    return currentStock > min_thresh && currentStock <= (min_thresh * 1.5);
   });
+
+  const sufficientMeds = items.filter(item => {
+    const available = item.total_qty || item.quantity || 0;
+    const qty_sold = item.qty_sold || 0;
+    const min_thresh = item.min_threshold || 0;
+    const currentStock = available - qty_sold;
+    return currentStock > (min_thresh * 1.5) && currentStock <= (min_thresh + 50);
+  });
+
+  const localRequests = [
+    ...criticalMeds.map(m => {
+      const available = m.total_qty || m.quantity || 0;
+      const qty_sold = m.qty_sold || 0;
+      const min_thresh = m.min_threshold || 0;
+      return { 
+        item_name: m.name, 
+        draft_message: `Urgent: Stock for ${m.name} is critically low (Available: ${available - qty_sold}, Min: ${min_thresh}). Please approve an emergency restock.`,
+        alert_type: 'critical'
+      }
+    }),
+    ...lowStockMeds.map(m => {
+      const available = m.total_qty || m.quantity || 0;
+      const qty_sold = m.qty_sold || 0;
+      const min_thresh = m.min_threshold || 0;
+      return { 
+        item_name: m.name, 
+        draft_message: `Low Stock: Stock for ${m.name} is approaching the minimum threshold (Available: ${available - qty_sold}, Min: ${min_thresh}). Please consider restocking.`,
+        alert_type: 'low'
+      }
+    }),
+    ...sufficientMeds.map(m => {
+      const available = m.total_qty || m.quantity || 0;
+      const qty_sold = m.qty_sold || 0;
+      const min_thresh = m.min_threshold || 0;
+      return { 
+        item_name: m.name, 
+        draft_message: `Sufficient Stock: ${m.name} currently has sufficient levels (Available: ${available - qty_sold}, Min: ${min_thresh}). Monitor closely.`,
+        alert_type: 'sufficient'
+      }
+    })
+  ];
+
+  // Add proactive alerts for high moving stock
+  if (analytics?.fastest_moving) {
+    analytics.fastest_moving.forEach(fast => {
+      if (!localRequests.some(r => r.item_name === fast.name) && fast.sold > 0) {
+        localRequests.push({
+          item_name: fast.name,
+          draft_message: `Proactive Alert: High Demand for ${fast.name} (${fast.sold} units dispensed recently). Consider restocking to prevent future shortages.`,
+          alert_type: 'proactive'
+        });
+      }
+    });
+  }
 
   // Billing Handlers
   const addToBill = (item: InventoryItem) => {
-    const availableQty = item.total_qty - item.qty_sold;
-    if (availableQty <= 0) return toast.error(`${item.name} is out of stock`);
-    
-    if (currentBillItems.find(m => m.id === item.id)) {
-      return toast.error(`${item.name} is already in the bill`);
-    }
-
-    setCurrentBillItems([
-      ...currentBillItems,
-      {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: 1,
-        maxQty: availableQty,
-        originalQtySold: item.qty_sold
+    setCurrentBillItems(current => {
+      // Use original backend quantity logic if possible to avoid state timing issues
+      const backendQty = (item as any).backend_qty !== undefined ? (item as any).backend_qty : item.total_qty;
+      const alreadyInBill = current.find(m => m.id === item.id);
+      
+      if (alreadyInBill) {
+        setTimeout(() => toast.error(`${item.name} is already in the bill`), 0);
+        return current;
       }
-    ]);
-    toast.success(`Added ${item.name} to bill`);
+      
+      if (backendQty <= 0) {
+        setTimeout(() => toast.error(`${item.name} is out of stock`), 0);
+        return current;
+      }
+
+      setTimeout(() => toast.success(`Added ${item.name} to bill`), 0);
+      return [
+        ...current,
+        {
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: 1,
+          maxQty: backendQty,
+          originalQtySold: item.qty_sold
+        }
+      ];
+    });
   };
 
   const updateBillQty = (id: number, delta: number) => {
-    setCurrentBillItems(current => current.map(med => {
-      if (med.id === id) {
-        const newQty = med.quantity + delta;
-        if (newQty > med.maxQty) {
-          toast.error(`Only ${med.maxQty} units of ${med.name} are available.`);
-          return med;
+    setCurrentBillItems(current => {
+      let maxQtyError = false;
+      let errorMsg = '';
+      
+      const newItems = current.map(med => {
+        if (med.id === id) {
+          const newQty = med.quantity + delta;
+          if (newQty > med.maxQty) {
+            maxQtyError = true;
+            errorMsg = `Only ${med.maxQty} units of ${med.name} are available.`;
+            return med;
+          }
+          if (newQty < 1) return med;
+          return { ...med, quantity: newQty };
         }
-        if (newQty < 1) return med;
-        return { ...med, quantity: newQty };
+        return med;
+      });
+      
+      if (maxQtyError) {
+        setTimeout(() => toast.error(errorMsg), 0);
       }
-      return med;
-    }));
+      
+      return newItems;
+    });
   };
 
   const removeFromBill = (id: number) => {
@@ -465,31 +597,42 @@ export default function InventoryManagement() {
     <div className="flex flex-col gap-6 max-w-7xl mx-auto">
       {/* Header Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
-        <div>
-          <h2 className="text-2xl font-semibold text-foreground">Inventory & Supplies</h2>
-          <p className="text-sm text-muted-foreground mt-1">Manage stock, track distribution history, and view analytics.</p>
+        <div className="flex flex-col gap-2">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">Inventory & Supplies</h2>
+            <p className="text-sm text-muted-foreground mt-1">Manage stock, track distribution history, and view analytics.</p>
+          </div>
+          <div>
+             <PeriodSelector 
+                value={period} 
+                onChange={(p, r) => { setPeriod(p); setDateRange(r); }} 
+                options={['This Week', 'Previous Week', 'This Month', 'Previous Month', 'This Year', 'Custom Range']} 
+              />
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap gap-3 w-full md:w-auto mt-4 md:mt-0">
           <Button variant="outline" onClick={() => setIsHistoryOpen(true)} className="flex-1 md:flex-none flex items-center gap-2 shadow-sm cursor-pointer">
             <History className="w-4 h-4" />
             View History
           </Button>
 
-          {/* Hidden File Input for CSV */}
-          <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+          {user?.role !== "DISTRICT_ADMIN" && (
+            <>
+              <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+              
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="flex-1 md:flex-none flex items-center gap-2 shadow-sm border-primary/50 text-primary cursor-pointer">
+                <Upload className="w-4 h-4" />
+                Upload Bulk CSV
+              </Button>
+            </>
+          )}
           
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="flex-1 md:flex-none flex items-center gap-2 shadow-sm border-primary/50 text-primary cursor-pointer">
-            <Upload className="w-4 h-4" />
-            Upload Bulk CSV
-          </Button>
-          
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger render={
-              <Button className="flex-1 md:flex-none flex items-center gap-2 shadow-sm cursor-pointer">
+          {user?.role !== "DISTRICT_ADMIN" && (
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger render={<Button className="flex-1 md:flex-none flex items-center gap-2 shadow-sm cursor-pointer" />}>
                 <Plus className="w-4 h-4" />
                 Add Medicine
-              </Button>
-            } />
+              </DialogTrigger>
             <DialogContent className="sm:max-w-[425px] rounded-xl border-border bg-card/95 backdrop-blur-md shadow-2xl">
               <DialogHeader>
                 <DialogTitle>Add New Medicine</DialogTitle>
@@ -522,6 +665,7 @@ export default function InventoryManagement() {
               </form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
@@ -545,12 +689,12 @@ export default function InventoryManagement() {
               <p className="text-sm font-semibold truncate">{analytics?.least_used || '-'}</p>
             </div>
             <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100">
-              <p className="text-[10px] uppercase tracking-wider text-blue-700 font-semibold mb-1">Monthly Consumed</p>
-              <p className="text-lg font-bold text-blue-900">{analytics?.monthly_consumption.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) || '0'}</p>
+              <p className="text-[10px] uppercase tracking-wider text-blue-700 font-semibold mb-1">Consumed ({period})</p>
+              <p className="text-lg font-bold text-blue-900">{analytics?.period_consumption.toLocaleString('en-IN') || '0'}</p>
             </div>
             <div className="bg-green-50/50 p-3 rounded-lg border border-green-100">
-              <p className="text-[10px] uppercase tracking-wider text-green-700 font-semibold mb-1">Weekly Restock</p>
-              <p className="text-lg font-bold text-green-900">{analytics?.weekly_restocking.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) || '0'}</p>
+              <p className="text-[10px] uppercase tracking-wider text-green-700 font-semibold mb-1">Restocked ({period})</p>
+              <p className="text-lg font-bold text-green-900">{analytics?.period_restocking.toLocaleString('en-IN') || '0'}</p>
             </div>
           </div>
 
@@ -616,7 +760,6 @@ export default function InventoryManagement() {
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-right">Price</TableHead>
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-right">Min Threshold</TableHead>
                     <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-center">Status</TableHead>
-                    <TableHead className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider text-center">Action</TableHead>
                     <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -654,11 +797,11 @@ export default function InventoryManagement() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-2 bg-muted/30 rounded-full px-1 py-1 w-max mx-auto border border-border">
-                            <button onClick={() => updateQuantitySold(item, -1)} className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-destructive/10 text-destructive transition-colors cursor-pointer disabled:opacity-50" disabled={item.qty_sold <= 0}>
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleQuantityClick(item, -1); }} className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-destructive/10 text-destructive transition-colors cursor-pointer disabled:opacity-50" disabled={item.qty_sold <= 0}>
                               <Minus className="h-3 w-3" />
                             </button>
                             <span className="font-mono font-semibold w-8 text-center text-foreground text-sm">{item.qty_sold}</span>
-                            <button onClick={() => updateQuantitySold(item, 1)} className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-primary/10 text-primary transition-colors cursor-pointer">
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleQuantityClick(item, 1); }} className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-primary/10 text-primary transition-colors cursor-pointer">
                               <Plus className="h-3 w-3" />
                             </button>
                           </div>
@@ -669,31 +812,22 @@ export default function InventoryManagement() {
                         <TableCell className="text-center">
                           {getStatusBadge(item)}
                         </TableCell>
-                        <TableCell className="text-center">
-                          <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            className="h-7 text-xs gap-1 border-primary/20 text-primary hover:bg-primary/10 w-24 cursor-pointer" 
-                            onClick={() => addToBill(item)}
-                            disabled={isOutOfStock || inBill}
-                          >
-                            {inBill ? 'Added' : <><Plus className="h-3 w-3" /> Add to Bill</>}
-                          </Button>
-                        </TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-full hover:bg-muted cursor-pointer">
-                              <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => { setSelectedItem(item); setEditFormData(item); setIsEditOpen(true); }}>
-                                Edit Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10" onClick={() => { setSelectedItem(item); setIsDeleteOpen(true); }}>
-                                Delete Item
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {user?.role !== "DISTRICT_ADMIN" && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-full hover:bg-muted cursor-pointer">
+                                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem className="cursor-pointer" onClick={() => { setSelectedItem(item); setEditFormData(item); setIsEditOpen(true); }}>
+                                  Edit Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10" onClick={() => { setSelectedItem(item); setIsDeleteOpen(true); }}>
+                                  Delete Item
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </TableCell>
                       </TableRow>
                     )})
@@ -757,7 +891,7 @@ export default function InventoryManagement() {
                   </div>
                   <div className="text-right flex items-center gap-2">
                     <span className="text-sm text-muted-foreground font-medium uppercase">Total</span>
-                    <span className="text-xl font-bold text-primary">₹{billTotal.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span className="text-xl font-bold text-primary">₹{billTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
                 </div>
                 <Button 
@@ -797,16 +931,142 @@ export default function InventoryManagement() {
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Left Side: General AI Insights */}
+              {/* Left Side: Local Critical Alerts (Moved from Right) */}
+              <div className="space-y-4 h-[500px] flex flex-col">
+                <div className="flex flex-col shrink-0 gap-3 mb-1">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-red-500" />
+                    Restock Recommendations & Alerts
+                  </h3>
+                  <div className="relative w-full">
+                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search items..." 
+                      value={restockSearch} 
+                      onChange={(e) => setRestockSearch(e.target.value)} 
+                      className="w-full h-9 pl-9 text-sm bg-background" 
+                    />
+                  </div>
+                  <div className="flex bg-muted/50 p-1 rounded-lg border border-border w-full">
+                    <button
+                      className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer ${alertTab === 'pending' ? 'bg-background shadow-sm border border-border text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      onClick={() => setAlertTab('pending')}
+                    >
+                      Pending
+                    </button>
+                    <button
+                      className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer ${alertTab === 'reviewed' ? 'bg-background shadow-sm border border-border text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      onClick={() => setAlertTab('reviewed')}
+                    >
+                      Reviewed
+                    </button>
+                  </div>
+                </div>
+
+                {(() => {
+                  let filteredDrafts = localRequests.filter((draft: any) => {
+                    const relatedReqs = requests.filter(r => r.resource_name === draft.item_name);
+                    const existingReq = relatedReqs.find(r => r.status === 'APPROVED') || relatedReqs[0];
+                    if (alertTab === 'pending') {
+                      return !existingReq || existingReq.status === 'PENDING';
+                    } else {
+                      return existingReq && (existingReq.status === 'APPROVED' || existingReq.status === 'REJECTED' || existingReq.status === 'FULFILLED');
+                    }
+                  });
+                  
+                  if (restockSearch) {
+                    filteredDrafts = filteredDrafts.filter((d: any) => d.item_name.toLowerCase().includes(restockSearch.toLowerCase()));
+                  }
+
+                  if (filteredDrafts.length === 0) {
+                    return (
+                      <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <p className="text-sm font-medium">
+                          {restockSearch ? "No items match your search." : alertTab === 'pending' ? "All critical thresholds are met. No pending requests." : "No reviewed requests for current recommendations."}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
+                      {filteredDrafts.map((draft: any, idx: number) => {
+                        const relatedReqs = requests.filter(r => r.resource_name === draft.item_name);
+                        const existingReq = relatedReqs.find(r => r.status === 'APPROVED') || relatedReqs[0];
+                        const isLocked = !!existingReq;
+                        
+                        let borderColor = 'border-destructive/20';
+                        let bgColor = 'bg-destructive/50';
+                        let badgeVariant: "default" | "destructive" | "outline" | "secondary" | null | undefined = 'destructive';
+                        let badgeText = 'Critical';
+                        
+                        if (draft.alert_type === 'low') {
+                          borderColor = 'border-yellow-500/20';
+                          bgColor = 'bg-yellow-500/50';
+                          badgeVariant = 'secondary';
+                          badgeText = 'Low Stock';
+                        } else if (draft.alert_type === 'sufficient') {
+                          borderColor = 'border-blue-500/20';
+                          bgColor = 'bg-blue-500/50';
+                          badgeVariant = 'default';
+                          badgeText = 'Sufficient';
+                        } else if (draft.alert_type === 'proactive') {
+                          borderColor = 'border-indigo-500/20';
+                          bgColor = 'bg-indigo-500/50';
+                          badgeVariant = 'secondary';
+                          badgeText = 'High Demand';
+                        }
+                        
+                        return (
+                          <div key={idx} className={`bg-card border ${borderColor} rounded-xl p-4 shadow-sm relative overflow-hidden group h-[200px] flex flex-col`}>
+                            {isLocked && (
+                              <div 
+                                className="absolute inset-0 bg-background/20 backdrop-blur-sm z-10 flex flex-col items-center justify-center border border-border cursor-pointer hover:bg-background/30 transition-colors"
+                                onClick={() => setSelectedRequestDetails(existingReq)}
+                              >
+                                <h4 className="text-sm font-bold mb-2 text-foreground">{draft.item_name}</h4>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`uppercase px-4 py-1 text-sm shadow-md text-white border-none ${existingReq.status === 'APPROVED' ? 'bg-green-500' : existingReq.status === 'REJECTED' ? 'bg-red-500' : 'bg-gray-500'}`}
+                                >
+                                  {existingReq.status}
+                                </Badge>
+                                <p className="text-xs text-foreground/80 mt-2 font-medium bg-background/50 px-2 py-1 rounded-md shadow-sm border border-border/50">Click here to see more details</p>
+                              </div>
+                            )}
+                            
+                            <div className={`absolute top-0 left-0 w-1 h-full ${bgColor} transition-colors`}></div>
+                            <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                              <Badge variant={badgeVariant} className={draft.alert_type === 'low' ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-100' : draft.alert_type === 'sufficient' ? 'bg-blue-100 text-blue-700 hover:bg-blue-100' : draft.alert_type === 'proactive' ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-100' : 'px-1.5 py-0'}>{badgeText}</Badge>
+                              {draft.item_name}
+                            </h4>
+                            <div className="bg-muted/30 p-3 rounded-lg text-sm text-foreground/80 mb-3 border border-border/50 font-medium whitespace-pre-wrap flex-1 overflow-y-auto">
+                              {draft.draft_message}
+                            </div>
+                            <div className="flex justify-end shrink-0">
+                              <Button disabled={isLocked} onClick={() => sendRequest(draft)} variant="outline" className={`border-${draft.alert_type === 'critical' ? 'destructive' : 'primary'}/30 text-${draft.alert_type === 'critical' ? 'destructive' : 'primary'} hover:bg-${draft.alert_type === 'critical' ? 'destructive' : 'primary'} hover:text-white transition-colors cursor-pointer text-xs h-8`}>
+                                Send Request for {draft.item_name}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Right Side: General AI Insights (Moved from Left) */}
               <div className="space-y-4 bg-muted/20 p-5 rounded-xl border border-border h-[500px] overflow-y-auto">
                 <h3 className="font-semibold text-foreground flex items-center gap-2 mb-4">
                   <Activity className="w-4 h-4 text-indigo-500" />
-                  AI Overall Health Insights
+                  AI Detailed Medicine Insights
                 </h3>
                 {!aiAnalysis && !aiLoading && (
                   <div className="text-center py-12 text-muted-foreground">
                     <Sparkles className="w-8 h-8 mx-auto mb-3 text-muted" />
-                    <p>Click "Generate AI Insights" to get an automated deep dive into your inventory health powered by Gemini.</p>
+                    <p>Click "Generate AI Insights" to get an automated detailed deep dive into every medicine powered by Gemini.</p>
                   </div>
                 )}
                 {aiLoading && (
@@ -818,59 +1078,6 @@ export default function InventoryManagement() {
                 {aiAnalysis && !aiLoading && (
                   <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed">
                     <ReactMarkdown>{Array.isArray(aiAnalysis.insights) ? aiAnalysis.insights.join('\n\n') : aiAnalysis.insights || ''}</ReactMarkdown>
-                  </div>
-                )}
-              </div>
-
-              {/* Right Side: Local Critical Alerts */}
-              <div className="space-y-4 h-[500px] flex flex-col">
-                <h3 className="font-semibold text-foreground flex items-center gap-2 shrink-0">
-                  <TrendingDown className="w-4 h-4 text-red-500" />
-                  Critical Stock Alerts
-                </h3>
-                {localRequests.length === 0 ? (
-                  <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <p className="text-sm font-medium">All critical thresholds are met. No emergency requests needed.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
-                    {localRequests.map((draft, idx) => {
-                      const relatedReqs = requests.filter(r => r.resource_name === draft.item_name);
-                      const existingReq = relatedReqs.find(r => r.status === 'APPROVED') || relatedReqs[0];
-                      const isLocked = !!existingReq;
-                      const isNoteExpanded = expandedNotes[draft.item_name] || false;
-                      
-                      return (
-                        <div key={idx} className="bg-card border border-destructive/20 rounded-xl p-4 shadow-sm relative overflow-hidden group h-[200px] flex flex-col">
-                          {isLocked && (
-                            <div 
-                              className="absolute inset-0 bg-background/20 backdrop-blur-sm z-10 flex flex-col items-center justify-center border border-border cursor-pointer hover:bg-background/30 transition-colors"
-                              onClick={() => setSelectedRequestDetails(existingReq)}
-                            >
-                              <Badge variant={existingReq.status === 'APPROVED' ? 'default' : existingReq.status === 'REJECTED' ? 'destructive' : 'secondary'} className="uppercase px-4 py-1 text-sm shadow-md">
-                                {existingReq.status}
-                              </Badge>
-                              <p className="text-xs text-foreground/80 mt-2 font-medium bg-background/50 px-2 py-1 rounded-md shadow-sm border border-border/50">Click here to see more details</p>
-                            </div>
-                          )}
-                          
-                          <div className="absolute top-0 left-0 w-1 h-full bg-destructive/50 transition-colors"></div>
-                          <h4 className="font-semibold text-destructive mb-2 flex items-center gap-2">
-                            <Badge variant="destructive" className="px-1.5 py-0">Critical</Badge>
-                            {draft.item_name}
-                          </h4>
-                          <div className="bg-muted/30 p-3 rounded-lg text-sm text-foreground/80 mb-3 border border-border/50 font-medium whitespace-pre-wrap flex-1 overflow-y-auto">
-                            {draft.draft_message}
-                          </div>
-                          <div className="flex justify-end shrink-0">
-                            <Button disabled={isLocked} onClick={() => sendRequest(draft)} variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive hover:text-white transition-colors cursor-pointer text-xs h-8">
-                              Send Request for {draft.item_name}
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 )}
               </div>
@@ -974,8 +1181,7 @@ export default function InventoryManagement() {
                         {log.reason && <> &bull; {log.reason}</>}
                       </p>
                       <p className="text-[11px] text-muted-foreground/70 mt-1">
-                        {new Date(log.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', 
-                          dateStyle: 'medium',
+                        {new Date(log.timestamp).toLocaleString('en-IN', { dateStyle: 'medium',
                           timeStyle: 'short'
                         })}
                       </p>
@@ -1025,14 +1231,14 @@ export default function InventoryManagement() {
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <span className="text-sm text-muted-foreground">Requested On</span>
                 <span className="text-sm text-foreground">
-                  {new Date(selectedRequestDetails.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                  {new Date(selectedRequestDetails.created_at).toLocaleString('en-IN', )}
                 </span>
               </div>
               {selectedRequestDetails.updated_at && (
                 <div className="flex items-center justify-between border-b border-border pb-3">
                   <span className="text-sm text-muted-foreground">Actioned On</span>
                   <span className="text-sm text-foreground">
-                    {new Date(selectedRequestDetails.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                    {new Date(selectedRequestDetails.updated_at).toLocaleString('en-IN', )}
                   </span>
                 </div>
               )}

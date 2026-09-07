@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Search, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import { toast } from "sonner";
 
 export function PatientForm({ onSubmit, onClose, doctors = [] }: any) {
   const [formData, setFormData] = useState({
@@ -24,6 +27,43 @@ export function PatientForm({ onSubmit, onClose, doctors = [] }: any) {
     pregnancy_status: "none",
     remarks: ""
   });
+  const [isChecking, setIsChecking] = useState(false);
+  const [checkStatus, setCheckStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const handleCheckPatient = async () => {
+    if (!formData.patient_code.trim()) {
+      toast.error("Please enter a Patient ID first");
+      return;
+    }
+
+    setIsChecking(true);
+    setCheckStatus('idle');
+
+    try {
+      const res = await apiFetch(`/api/v1/patients/code/${formData.patient_code.trim()}`);
+
+      if (!res.ok) throw new Error('Patient not found');
+
+      const data = await res.json();
+      setCheckStatus('success');
+      toast.success('Patient found! Details autofilled.');
+      setFormData(prev => ({
+        ...prev,
+        full_name: data.name || "",
+        age: data.age?.toString() || "",
+        gender: data.gender || "",
+        phone: data.contact || "",
+        village: data.address || "",
+        blood_group: data.blood_group || prev.blood_group
+      }));
+    } catch (err) {
+      console.error(err);
+      setCheckStatus('error');
+      toast.error('Patient not found. Please check the ID.');
+    } finally {
+      setIsChecking(false);
+    }
+  };
 
   const handleChange = (e: any) => {
     const { name, value } = e.target;
@@ -82,14 +122,50 @@ export function PatientForm({ onSubmit, onClose, doctors = [] }: any) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2 col-span-2">
                 <label className="text-sm font-medium flex items-center justify-between">
-                  <span>Patient ID / ABHA ID <span className="text-xs text-muted-foreground font-normal">(Optional - Auto-generated if left blank)</span></span>
+                  <span>Patient ID / ABHA ID <span className="text-xs text-muted-foreground font-normal">(Optional — enter to autofill details)</span></span>
                 </label>
-                <Input 
-                  name="patient_code" 
-                  placeholder="e.g. ABHA-1234-5678 or PT-0001" 
-                  value={formData.patient_code} 
-                  onChange={handleChange} 
-                />
+                <div className="flex gap-2 items-center">
+                  <div className="relative flex-1">
+                    <Input
+                      name="patient_code"
+                      placeholder="e.g. ABHA-1234-5678 or PT-0001"
+                      value={formData.patient_code}
+                      onChange={(e) => {
+                        handleChange(e);
+                        setCheckStatus('idle');
+                      }}
+                      disabled={isChecking}
+                      className={`pr-10 ${
+                        checkStatus === 'success'
+                          ? 'border-green-500 focus-visible:ring-green-500'
+                          : checkStatus === 'error'
+                          ? 'border-red-500 focus-visible:ring-red-500'
+                          : ''
+                      }`}
+                    />
+                    {checkStatus === 'success' && (
+                      <CheckCircle2 className="absolute right-3 top-2.5 h-5 w-5 text-green-500" />
+                    )}
+                    {checkStatus === 'error' && (
+                      <AlertCircle className="absolute right-3 top-2.5 h-5 w-5 text-red-500" />
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleCheckPatient}
+                    disabled={isChecking || !formData.patient_code.trim()}
+                    className="shrink-0 cursor-pointer"
+                  >
+                    {isChecking ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
+                    Check
+                  </Button>
+                </div>
+                {checkStatus === 'success' && (
+                  <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                    <CheckCircle2 className="w-3 h-3" /> Patient found — fields autofilled below.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2 col-span-2">

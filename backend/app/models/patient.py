@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -8,9 +8,10 @@ class Patient(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     hospital_id = Column(Integer, ForeignKey("health_centres.id"), nullable=False, index=True)
-    patient_code = Column(String, nullable=True, index=True)
+    patient_code = Column(String, nullable=True, unique=True, index=True)
     name = Column(String, nullable=False, index=True)
     age = Column(Integer, nullable=False)
+    dob = Column(Date, nullable=True)
     gender = Column(String, nullable=False)
     contact = Column(String, nullable=True)
     address = Column(String, nullable=True)
@@ -18,6 +19,8 @@ class Patient(Base):
     status = Column(String, nullable=False, index=True) # Admitted/Discharged/Outpatient
     admitted_at = Column(DateTime(timezone=True), server_default=func.now())
     discharged_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     hospital = relationship("HealthCentre", back_populates="patients")

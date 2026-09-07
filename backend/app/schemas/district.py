@@ -20,6 +20,7 @@ class ResourceRequestUpdate(BaseModel):
 class ResourceRequestResponse(ResourceRequestBase):
     id: int
     requesting_phc_id: int
+    requested_by_user_id: Optional[int] = None
     status: str
     admin_note: Optional[str] = None
     created_at: datetime

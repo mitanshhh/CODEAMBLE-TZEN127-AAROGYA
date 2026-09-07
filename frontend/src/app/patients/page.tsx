@@ -1,5 +1,6 @@
 "use client";
 import { apiFetch, API_BASE_URL } from '@/lib/api';
+import { formatExactTimestamp } from "@/lib/dateUtils";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { PatientAnalyticsCards } from "@/components/patients/PatientAnalyticsCards";
 import { PatientForm } from "@/components/patients/PatientForm";
+import { PatientProfileDrawer } from "@/components/patients/PatientProfileDrawer";
 import { toast } from "sonner";
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,6 +29,8 @@ export default function PatientsPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedActionPatient, setSelectedActionPatient] = useState<any>(null);
+  const [selectedPatientCode, setSelectedPatientCode] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [editFormData, setEditFormData] = useState({
     patient_code: "",
@@ -204,7 +208,7 @@ export default function PatientsPage() {
         </div>
       </div>
 
-      {analytics && <PatientAnalyticsCards kpis={analytics.kpis} charts={analytics.charts} />}
+      {analytics && <PatientAnalyticsCards kpis={analytics.kpis} charts={analytics.charts} patients={patients} />}
 
       <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm flex flex-col mt-6">
         <div className="p-4 border-b border-border bg-muted/20 flex flex-col md:flex-row gap-4 justify-between items-center">
@@ -241,13 +245,14 @@ export default function PatientsPage() {
           <Table>
             <TableHeader className="bg-muted/30">
               <TableRow>
-                <TableHead className="w-[100px]">ID</TableHead>
+                <TableHead className="w-[120px]">Patient ID</TableHead>
                 <TableHead>Patient Info</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>Visit</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Arrival Time</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Edit</TableHead>
+                <TableHead>Bed</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -273,8 +278,8 @@ export default function PatientsPage() {
                       <div className="text-xs text-muted-foreground">{p.age}y • {p.gender}</div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium text-sm">General</div>
-                      <div className="text-xs text-muted-foreground">OPD</div>
+                      <div className="font-medium text-sm">OPD</div>
+                      <div className="text-xs text-muted-foreground">General</div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={getPriorityColor("Normal")}>
@@ -282,34 +287,52 @@ export default function PatientsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground font-medium">
-                      {p.admitted_at ? new Date(p.admitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' }) : '--:--'}
+                      {formatExactTimestamp(p.admitted_at)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="outline" className={getStatusColor(p.status)}>
                           {p.status}
                         </Badge>
-                        {p.status === "Waiting" && (
+                        {role !== "DISTRICT_ADMIN" && p.status === "Waiting" && (
                           <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Consultation")} className="text-xs h-7 px-2 text-blue-600 border-blue-200 hover:bg-blue-50 cursor-pointer">
                             → Consult
                           </Button>
                         )}
-                        {p.status === "Consultation" && (
+                        {role !== "DISTRICT_ADMIN" && p.status === "Consultation" && (
                           <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Checkup")} className="text-xs h-7 px-2 text-orange-600 border-orange-200 hover:bg-orange-50 cursor-pointer">
                             → Checkup
                           </Button>
                         )}
-                        {p.status === "Checkup" && (
+                        {role !== "DISTRICT_ADMIN" && p.status === "Checkup" && (
                           <Button size="sm" variant="outline" onClick={() => updateStatus(p.id, "Completed")} className="text-xs h-7 px-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 cursor-pointer">
                             → Complete
                           </Button>
                         )}
                       </div>
                     </TableCell>
+                    <TableCell>
+                      {p.bed ? <span className="text-xs font-medium bg-muted px-2 py-1 rounded">Bed {p.bed.bed_number}</span> : <span className="text-muted-foreground text-xs">None</span>}
+                    </TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" variant="ghost" onClick={() => openPatientEdit(p)} className="h-8 w-8 p-0 cursor-pointer hover:bg-muted" title="Edit patient">
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="secondary" 
+                          onClick={() => {
+                            setSelectedPatientCode(p.patient_code || null);
+                            setIsProfileOpen(true);
+                          }} 
+                          className="text-xs h-8 px-3 cursor-pointer"
+                        >
+                          View
+                        </Button>
+                        {role !== "DISTRICT_ADMIN" && (
+                          <Button size="sm" variant="ghost" onClick={() => openPatientEdit(p)} className="h-8 w-8 p-0 cursor-pointer hover:bg-muted" title="Edit patient">
+                            <ChevronRight className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -318,6 +341,12 @@ export default function PatientsPage() {
           </Table>
         </div>
       </div>
+
+      <PatientProfileDrawer 
+        patientCode={selectedPatientCode}
+        open={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
+      />
 
       <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
         <SheetContent side="right" className="w-full md:w-[600px] sm:max-w-none p-0 border-l border-border bg-background">

@@ -7,18 +7,21 @@ from app.db.database import get_db
 from app.models.attendance import DailyQRSession, AttendanceRecord, Doctor, RandomAttendanceCheck
 from app.models.user import User, UserRole
 from app.models.health_centre import HealthCentre
-from app.schemas.attendance import DailyQRSessionResponse, AttendanceRecordResponse, QRScanRequest
+from app.schemas.attendance import DailyQRSessionResponse, AttendanceRecordResponse, QRScanRequest, QRGenerateRequest
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
 import math
 from app.core.scheduler import schedule_random_check
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.schemas.common import PaginatedResponse
 
 router = APIRouter()
 
 @router.post("/qr/generate", response_model=DailyQRSessionResponse)
 def generate_qr_session(
+    req: QRGenerateRequest,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     today = date.today()
     existing_session = db.query(DailyQRSession).filter(
@@ -28,6 +31,8 @@ def generate_qr_session(
     
     if existing_session:
         existing_session.qr_token = str(uuid.uuid4())
+        existing_session.device_lat = req.lat
+        existing_session.device_lng = req.lng
         existing_session.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(existing_session)
@@ -38,7 +43,9 @@ def generate_qr_session(
         hospital_id=hospital_id,
         date=today,
         qr_token=new_token,
-        is_active=True
+        is_active=True,
+        device_lat=req.lat,
+        device_lng=req.lng
     )
     db.add(session)
     db.commit()
@@ -76,11 +83,17 @@ def scan_qr_attendance(
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found in this hospital")
         
-    phc = db.query(HealthCentre).filter(HealthCentre.id == session.hospital_id).first()
-    if phc and hasattr(phc, 'latitude') and phc.latitude and phc.longitude:
-        dist = haversine(req.lat, req.lng, float(phc.latitude), float(phc.longitude))
+    if session.device_lat is not None and session.device_lng is not None:
+        dist = haversine(req.lat, req.lng, session.device_lat, session.device_lng)
         if dist > 100:
-            raise HTTPException(status_code=400, detail=f"You are too far from the PHC ({int(dist)}m away). Must be within 100m.")
+            raise HTTPException(status_code=400, detail=f"You are too far from the scanning device ({int(dist)}m away). Must be within 100m.")
+    else:
+        # Fallback to PHC location if available
+        phc = db.query(HealthCentre).filter(HealthCentre.id == session.hospital_id).first()
+        if phc and hasattr(phc, 'latitude') and phc.latitude and phc.longitude:
+            dist = haversine(req.lat, req.lng, float(phc.latitude), float(phc.longitude))
+            if dist > 100:
+                raise HTTPException(status_code=400, detail=f"You are too far from the PHC ({int(dist)}m away). Must be within 100m.")
     
     # 1. Check if this is a random verification response
     pending_check = db.query(RandomAttendanceCheck).filter(
@@ -118,6 +131,18 @@ def scan_qr_attendance(
     
     return {"message": "Attendance recorded successfully"}
 
+@router.get("/doctor/me")
+def get_my_doctor_dashboard(
+    db: Session = Depends(get_db),
+    hospital_id: int = Depends(resolve_hospital_id),
+    current_user: User = Depends(require_role([UserRole.DOCTOR, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
+):
+    doctor = db.query(Doctor).filter(Doctor.user_id == current_user.id).first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor profile not found for the current user.")
+    
+    return get_doctor_dashboard_logic(doctor.id, db, hospital_id, current_user)
+
 @router.get("/doctor/dashboard")
 def get_doctor_dashboard(
     doctor_id: int,
@@ -125,6 +150,9 @@ def get_doctor_dashboard(
     hospital_id: int = Depends(resolve_hospital_id),
     current_user: User = Depends(get_current_user)
 ):
+    return get_doctor_dashboard_logic(doctor_id, db, hospital_id, current_user)
+
+def get_doctor_dashboard_logic(doctor_id, db, hospital_id, current_user):
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id, Doctor.hospital_id == hospital_id).first()
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
@@ -186,6 +214,7 @@ def get_doctor_dashboard(
     
     return {
         "doctor": {
+            "id": doctor.id,
             "name": doctor.name,
             "specialization": doctor.specialization or "General",
             "calendar_linked": False
@@ -203,7 +232,7 @@ def get_doctor_dashboard(
 def get_attendance_dashboard(
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
     today = date.today()
     session = db.query(DailyQRSession).filter(
@@ -227,17 +256,23 @@ def get_attendance_dashboard(
 @router.get("/records")
 def get_attendance_records(
     status: str = "All",
+    filter_date: date = Query(default_factory=date.today),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
-    today = date.today()
     session = db.query(DailyQRSession).filter(
         DailyQRSession.hospital_id == hospital_id,
-        DailyQRSession.date == today
+        DailyQRSession.date == filter_date
     ).first()
     
-    doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
+    doctors_query = db.query(Doctor).filter(Doctor.hospital_id == hospital_id)
+    
+    total = doctors_query.count()
+    doctors = doctors_query.offset(offset).limit(limit).all()
+    
     records_by_doctor = {}
     if session:
         records = db.query(AttendanceRecord).filter(AttendanceRecord.session_id == session.id).all()
@@ -268,5 +303,10 @@ def get_attendance_records(
             "scanned_via": scanned_via
         })
         
-    return results
+    return PaginatedResponse(
+        data=results,
+        total=total,
+        limit=limit,
+        offset=offset
+    )
 

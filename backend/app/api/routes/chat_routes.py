@@ -22,8 +22,7 @@ CHATBOT_ALLOWED_ROLES = {
     UserRole.RECEPTIONIST,
     UserRole.DOCTOR,
     UserRole.MEDICAL_OFFICER,
-    UserRole.PHARMACIST,
-    UserRole.DATA_ENTRY,
+    UserRole.DEVELOPER,
 }
 
 
@@ -40,7 +39,7 @@ def _effective_chat_hospital_id(current_user: User, requested_hospital_id: int |
     return requested_hospital_id
 
 
-@router.post("/", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse)
 @limiter.limit("20/minute")
 def chat(
     request: Request,

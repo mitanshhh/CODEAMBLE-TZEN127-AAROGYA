@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,30 +22,23 @@ export default function DoctorDashboard() {
     try {
       setLoading(true);
       
-      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
-      const docsRes = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/patients/doctors${hospitalQuery}`);
-      if (!docsRes.ok) throw new Error("Failed to fetch doctors");
-      const docs = await docsRes.json();
-      
-      const loggedInUser = JSON.parse(localStorage.getItem("user") || "{}");
-      const myDoc = docs.find((d: any) => d.user_id === loggedInUser.id);
-      
-      if (!myDoc) {
-        // Handle empty state gracefully instead of erroring
-        setData(null);
-        setLoading(false);
-        return;
-      }
-      
-      const currentDocId = myDoc.id;
-      setDocId(currentDocId);
-      
-      const hospitalQueryParam = selectedHospitalId ? `&hospital_id=${selectedHospitalId}` : '';
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/doctor/dashboard?doctor_id=${currentDocId}${hospitalQueryParam}`);
+      const hospitalQueryParam = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const role = localStorage.getItem("role") || "DOCTOR";
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/doctor/me${hospitalQueryParam}`, {
+        headers: { 'X-Role': role }
+      });
       if (res.ok) {
-        setData(await res.json());
+        const dashboardData = await res.json();
+        setData(dashboardData);
+        if (dashboardData?.doctor?.id) {
+          setDocId(dashboardData.doctor.id);
+        }
       } else {
-        throw new Error("Failed to fetch dashboard");
+        if (res.status === 404) {
+          setData(null);
+        } else {
+          throw new Error("Failed to fetch dashboard");
+        }
       }
     } catch (e) {
       toast.error("Failed to fetch dashboard data");
@@ -55,9 +48,7 @@ export default function DoctorDashboard() {
   };
 
   useEffect(() => {
-    if (selectedHospitalId) {
-      fetchData();
-    }
+    fetchData();
   }, [selectedHospitalId]);
 
   const handleLinkCalendar = () => {
@@ -78,13 +69,14 @@ export default function DoctorDashboard() {
     }
   };
 
-  // Mock chart data if none
-  const chartData = [
-    { name: 'Week 1', rate: 95 },
-    { name: 'Week 2', rate: 80 },
-    { name: 'Week 3', rate: 100 },
-    { name: 'Week 4', rate: Math.round(data?.stats?.attendance_percentage || 0) },
-  ];
+  const chartData = useMemo(() => {
+    if (!data?.history || data.history.length === 0) return [];
+    // Show last 7 days trend
+    return [...data.history].reverse().slice(-7).map((h: any) => ({
+      name: new Date(h.date).toLocaleDateString(undefined, { weekday: 'short' }),
+      rate: h.status === 'Present' ? 100 : (h.status === 'Late' ? 80 : 0)
+    }));
+  }, [data]);
 
   if (loading) {
     return <div className="p-8 text-center text-muted-foreground">Loading your dashboard...</div>;

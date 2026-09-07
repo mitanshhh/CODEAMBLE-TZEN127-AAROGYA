@@ -20,7 +20,7 @@ def generate_random_password(length=12):
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("", response_model=List[UserResponse])
 def get_users(
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
@@ -33,7 +33,7 @@ def get_users(
     
     return db.query(User).filter(User.hospital_id == current_user.hospital_id).all()
 
-@router.post("/", response_model=UserResponse)
+@router.post("", response_model=UserResponse)
 def create_user(
     user_in: UserCreate,
     db: Session = Depends(get_db),

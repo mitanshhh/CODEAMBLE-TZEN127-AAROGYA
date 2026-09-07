@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from '@/contexts/AuthContext';
 import { BedTable } from "@/components/beds/BedTable";
 import { AnalyticsCards } from "@/components/beds/AnalyticsCards";
-import { AIRecommendations } from "@/components/beds/AIRecommendations";
+
 import { toast } from "sonner";
 import { RefreshCw, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ export default function BedManagement() {
   const [submitting, setSubmitting] = useState(false);
 
   // Check if role is allowed to manage beds
-  const allowedRoles = ["DISTRICT_ADMIN", "MEDICAL_OFFICER", "PHC_STAFF", "RECEPTIONIST", "DATA_ENTRY", "DEVELOPER"];
+  const allowedRoles = ["MEDICAL_OFFICER", "PHC_STAFF", "RECEPTIONIST", "DATA_ENTRY", "DEVELOPER"];
   const canManage = user?.role && allowedRoles.includes(user.role);
 
   const fetchBeds = async () => {
@@ -240,7 +240,7 @@ export default function BedManagement() {
       <div className="flex justify-between items-end mb-2">
         <div>
           <h2 className="text-2xl font-semibold text-foreground">Bed Management</h2>
-          <p className="text-sm text-muted-foreground mt-1">Real-time bed availability and patient assignments.</p>
+          <p className="text-sm text-muted-foreground mt-1">Monitor bed availability, occupancy and upcoming capacity demand.</p>
         </div>
         <div className="flex gap-2">
           {canManage && (
@@ -314,7 +314,7 @@ export default function BedManagement() {
         </DialogContent>
       </Dialog>
 
-      {!loading && analytics && <AIRecommendations alerts={analytics.ai_alerts} />}
+
 
       {!loading && analytics && (
         <AnalyticsCards kpis={analytics.kpis} forecast={analytics.forecast} />

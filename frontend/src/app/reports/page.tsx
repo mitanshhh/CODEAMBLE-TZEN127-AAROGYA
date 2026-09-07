@@ -184,7 +184,7 @@ export default function ReportsDashboard() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
                         {report.pdf_url ? (
-                          <a href={`${process.env.NEXT_PUBLIC_API_URL}${report.pdf_url}`} target="_blank" rel="noopener noreferrer">
+                          <a href={report.pdf_url.startsWith('http') ? report.pdf_url : `${process.env.NEXT_PUBLIC_API_URL}${report.pdf_url}`} target="_blank" rel="noopener noreferrer">
                             <Button variant="outline" size="sm" className="rounded-full gap-2 transition-transform active:scale-95 text-blue-600 border-blue-200 hover:bg-blue-50">
                               <Download className="w-3.5 h-3.5" /> Download PDF
                             </Button>

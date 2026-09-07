@@ -15,7 +15,7 @@ router = APIRouter()
 @router.get("/map-data")
 def get_map_data(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN]))
+    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
     centres = db.query(HealthCentre).all()
     return [
@@ -54,14 +54,15 @@ def get_district_overview(
     medicine_alerts = db.query(InventoryItem).filter(InventoryItem.quantity <= InventoryItem.min_threshold).count()
     
     # Critical centres: status == 'Critical' or health_score < 50 or 0 available beds
-    from sqlalchemy import or_
-    critical_centres = db.query(HealthCentre).filter(
-        or_(
-            HealthCentre.status == "Critical",
-            HealthCentre.health_score < 50,
-            (HealthCentre.available_beds == 0) & (HealthCentre.total_beds > 0)
-        )
-    ).count()
+    from app.services.health_score import calculate_health_score
+    
+    # We need to evaluate the live health score for all active centres
+    all_centres = db.query(HealthCentre).all()
+    critical_centres = 0
+    for c in all_centres:
+        live_score = calculate_health_score(db, c.id)
+        if c.status == "Critical" or live_score < 50 or (c.available_beds == 0 and c.total_beds > 0):
+            critical_centres += 1
     
     # Doctor presence rate (today)
     today = datetime.now().date()
@@ -98,6 +99,7 @@ def create_resource_request(
 ):
     new_req = ResourceRequest(
         requesting_phc_id=hospital_id,
+        requested_by_user_id=current_user.id,
         **request_in.model_dump()
     )
     db.add(new_req)
@@ -110,7 +112,7 @@ def update_resource_request(
     request_id: int,
     update_in: ResourceRequestUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN]))
+    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
     req = db.query(ResourceRequest).filter(ResourceRequest.id == request_id).first()
     if not req:

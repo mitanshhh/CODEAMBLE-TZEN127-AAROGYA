@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, UserPlus, FileMinus } from "lucide-react";
+import { Edit3, Trash2 } from "lucide-react";
+import { formatExactTimestamp } from "@/lib/dateUtils";
 import { BedDetailDrawer } from "./BedDetailDrawer";
 
 interface BedTableProps {
@@ -59,29 +61,30 @@ export function BedTable({ beds, onAdmit, onDischarge, onStatusChange, onEdit }:
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>Bed</TableHead>
-              <TableHead>Ward</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Bed ID</TableHead>
+              <TableHead>Ward / Department</TableHead>
               <TableHead>Patient</TableHead>
-              <TableHead>Admission Time</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Allocated Since</TableHead>
+              <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredBeds.map(bed => (
               <TableRow key={bed.id} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setSelectedBed(bed)}>
                 <TableCell className="font-semibold">{bed.bed_number}</TableCell>
-                <TableCell>{bed.ward}</TableCell>
-                <TableCell className="text-muted-foreground text-sm">{bed.bed_type}</TableCell>
+                <TableCell>
+                  <div>{bed.ward}</div>
+                  <div className="text-muted-foreground text-xs">{bed.bed_type}</div>
+                </TableCell>
+                <TableCell className="font-medium">{bed.patient_name || "—"}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={`${getStatusColor(bed.status)}`}>
                     {bed.status}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-medium">{bed.patient_name || "--"}</TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {bed.admission_time ? new Date(bed.admission_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : "--"}
+                <TableCell className="text-sm font-medium text-muted-foreground">
+                  {bed.admission_time ? formatExactTimestamp(bed.admission_time) : "—"}
                 </TableCell>
                 <TableCell className="text-right space-x-2">
                   {onEdit && (

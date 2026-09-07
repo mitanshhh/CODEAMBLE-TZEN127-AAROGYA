@@ -68,8 +68,7 @@ const CHATBOT_ALLOWED_ROLES = new Set([
   "RECEPTIONIST",
   "DOCTOR",
   "MEDICAL_OFFICER",
-  "PHARMACIST",
-  "DATA_ENTRY",
+  "DEVELOPER",
 ]);
 
 function formatLabel(key: string) {
@@ -320,7 +319,7 @@ export function FloatingChatbot() {
                           {!message.response.success && <AlertCircle className="h-4 w-4" />}
                         </div>
                       )}
-                      <p className="leading-relaxed">{message.content}</p>
+                      <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
                       {message.response && (
                         <>
                           <Summary response={message.response} />

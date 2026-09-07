@@ -7,8 +7,25 @@ class Report(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     hospital_id = Column(Integer, ForeignKey("health_centres.id"), nullable=False, index=True)
-    month_year = Column(String, nullable=False, index=True)
+    
+    # Period Metadata
+    period_type = Column(String, nullable=False, default='This Week')
+    period_start = Column(DateTime(timezone=True), nullable=False)
+    period_end = Column(DateTime(timezone=True), nullable=False)
+    
+    # Hashing for staleness checks
+    data_version = Column(String, nullable=False)
+    
+    # Generation Metadata
+    generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    generated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    # Structured AI Content
+    executive_summary = Column(Text, nullable=True)
+    risk_analysis = Column(Text, nullable=True)     # stored as JSON string
+    recommendations = Column(Text, nullable=True)   # stored as JSON string
+    key_insights = Column(Text, nullable=True)      # stored as JSON string
+    
+    # Aggregate Metrics
     health_score = Column(Float, nullable=True)
-    ai_insights_json = Column(Text, nullable=True)
-    pdf_url = Column(String, nullable=True) # Stored internally, accessed via secure endpoint
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    pdf_url = Column(String, nullable=True)

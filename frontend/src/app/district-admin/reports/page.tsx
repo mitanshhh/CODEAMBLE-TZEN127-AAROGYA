@@ -166,7 +166,7 @@ export default function DistrictReportsDashboard() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          render={<a href={`${process.env.NEXT_PUBLIC_API_URL}${report.pdf_url}`} target="_blank" rel="noopener noreferrer" />}
+                          render={<a href={report.pdf_url?.startsWith('http') ? report.pdf_url : `${process.env.NEXT_PUBLIC_API_URL}${report.pdf_url}`} target="_blank" rel="noopener noreferrer" />}
                           className="text-primary hover:text-primary/80"
                         >
                           Download

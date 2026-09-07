@@ -19,7 +19,6 @@ export default function QRGenerator() {
 
   const fetchToken = async (lat?: number, lng?: number) => {
     try {
-      const authToken = localStorage.getItem("token") || "mock_token";
       const role = localStorage.getItem("role") || "MEDICAL_OFFICER";
       
       const body = lat && lng ? JSON.stringify({ lat, lng }) : undefined;
@@ -27,7 +26,6 @@ export default function QRGenerator() {
       const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/qr/generate${hospitalQuery}`, {
         method: 'POST',
         headers: { 
-          'Authorization': `Bearer ${authToken}`, 
           'X-Role': role,
           'Content-Type': 'application/json'
         },

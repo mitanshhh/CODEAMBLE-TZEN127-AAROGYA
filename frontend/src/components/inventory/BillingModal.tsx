@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { apiFetch } from '@/lib/api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { PatientSearchInput } from '../patients/PatientSearchInput';
 
 interface SelectedMedicine {
   id: number;
@@ -33,6 +34,7 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
   const [contactNumber, setContactNumber] = useState("");
   const [prescribedBy, setPrescribedBy] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPatientLocked, setIsPatientLocked] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -42,6 +44,7 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
       setContactNumber("");
       setPrescribedBy("");
       setIsGenerating(false);
+      setIsPatientLocked(false);
     }
   }, [isOpen]);
 
@@ -75,7 +78,8 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
           headers,
           body: JSON.stringify({ 
             quantity: newTotalQty,
-            note: `Billed to patient: ${patientName}${pIdStr}` 
+            note: `Billed to patient: ${patientName}${pIdStr}`,
+            patient_code: patientCode.trim() || undefined
           })
         });
 
@@ -173,32 +177,51 @@ export function BillingModal({ isOpen, onOpenChange, hospitalName, selectedMedic
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <label className="text-sm font-medium">Patient ID / ABHA ID <span className="text-xs text-muted-foreground font-normal">(Optional)</span></label>
-            <Input 
-              placeholder="e.g. PT-0001 or ABHA-1234-5678" 
-              value={patientCode} 
-              onChange={e => setPatientCode(e.target.value)} 
-              className="bg-background"
+            <label className="text-sm font-medium">Patient ID / ABHA ID</label>
+            <PatientSearchInput 
+              onPatientFound={(patient) => {
+                setPatientCode(patient.patient_code || '');
+                setPatientName(patient.name || '');
+                setContactNumber(patient.contact || '');
+                setIsPatientLocked(true);
+              }}
+              disabled={isGenerating || isPatientLocked}
             />
+            {isPatientLocked && (
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="sm" 
+                className="w-fit text-xs h-6 px-2 mt-1" 
+                onClick={() => {
+                  setIsPatientLocked(false);
+                  setPatientCode('');
+                  setPatientName('');
+                  setContactNumber('');
+                }}
+              >
+                Clear Patient
+              </Button>
+            )}
           </div>
 
           <div className="grid gap-2">
             <label className="text-sm font-medium">Patient Name <span className="text-destructive">*</span></label>
             <Input 
-              placeholder="e.g. Rahul Sharma" 
               value={patientName} 
               onChange={e => setPatientName(e.target.value)} 
               className="bg-background"
+              disabled={isPatientLocked}
             />
           </div>
           
           <div className="grid gap-2">
             <label className="text-sm font-medium">Contact Number <span className="text-destructive">*</span></label>
             <Input 
-              placeholder="e.g. +91 9876543210" 
               value={contactNumber} 
               onChange={e => setContactNumber(e.target.value)} 
               className="bg-background"
+              disabled={isPatientLocked}
             />
           </div>
           

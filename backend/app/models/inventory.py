@@ -17,6 +17,8 @@ class InventoryItem(Base):
     expiry_date = Column(Date, nullable=True)
     batch_number = Column(String, nullable=True)
     status = Column(String, default="Normal") # Normal/Low Stock/Expired
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     hospital = relationship("HealthCentre", back_populates="inventory_items")
@@ -32,6 +34,7 @@ class InventoryLog(Base):
     change_amount = Column(Integer, nullable=False)
     reason = Column(String, nullable=True)
     performed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, index=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     # Relationships

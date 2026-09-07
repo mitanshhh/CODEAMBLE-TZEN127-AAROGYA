@@ -27,6 +27,7 @@ class InventoryItemUpdate(BaseModel):
     batch_number: Optional[str] = None
     status: Optional[str] = None
     note: Optional[str] = None
+    patient_code: Optional[str] = None
 
 class InventoryItemResponse(InventoryItemBase):
     id: int

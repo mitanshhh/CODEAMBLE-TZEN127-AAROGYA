@@ -16,9 +16,9 @@ def translate_text(
     request: Request,
     req: TranslateRequest
 ):
-    # Relies on GOOGLE_APPLICATION_CREDENTIALS env var, or mock if not set
     if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-        return {"translated_text": f"[MOCK TRANSLATION to {req.target_language}]: {req.text}"}
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Translation service is not configured for production use.")
         
     translate_client = translate.Client()
     result = translate_client.translate(

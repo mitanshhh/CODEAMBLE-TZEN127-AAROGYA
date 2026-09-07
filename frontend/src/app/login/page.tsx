@@ -54,7 +54,7 @@ export default function LoginPage() {
       <div className="m-auto w-full max-w-lg relative z-10 flex flex-col">
         <div className="flex justify-center">
           <div className="h-20 w-20 bg-background rounded-2xl flex items-center justify-center border border-primary/20 shadow-sm backdrop-blur-sm overflow-hidden p-2">
-            <img src="/aarogya_logo.png" alt="Aarogya Logo" className="w-full h-full object-contain" />
+            <img src="./logo.png" alt="Aarogya Logo" className="w-full h-full object-contain" />
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-foreground">

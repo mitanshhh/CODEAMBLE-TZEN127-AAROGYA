@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 import pandas as pd
 import io
@@ -29,18 +30,19 @@ def sanitize_csv_value(val):
         return "'" + val
     return val
 
-def log_inventory_change(db: Session, inventory_id: int, change_type: str, amount: int, user_id: int, reason: str = None):
+def log_inventory_change(db: Session, inventory_id: int, change_type: str, amount: int, user_id: int, reason: str = None, patient_id: int = None):
     log = InventoryLog(
         inventory_id=inventory_id,
         change_type=change_type,
         change_amount=amount,
         reason=reason,
-        performed_by_user_id=user_id
+        performed_by_user_id=user_id,
+        patient_id=patient_id
     )
     db.add(log)
     # The caller is responsible for db.commit() to ensure atomicity
 
-@router.get("/", response_model=PaginatedResponse[InventoryItemResponse])
+@router.get("", response_model=PaginatedResponse[InventoryItemResponse])
 def get_inventory(
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
@@ -57,12 +59,12 @@ def get_inventory(
     
     return PaginatedResponse(data=items, total=total, limit=limit, offset=offset)
 
-@router.post("/", response_model=InventoryItemResponse)
+@router.post("", response_model=InventoryItemResponse)
 def add_inventory_item(
     item_in: InventoryItemCreate,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     item_in.hospital_id = hospital_id
     
@@ -96,7 +98,7 @@ def update_inventory_item(
     item_id: int,
     item_in: InventoryItemUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN]))
+    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.DATA_ENTRY, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
@@ -105,7 +107,7 @@ def update_inventory_item(
     old_qty = item.quantity
     
     for key, value in item_in.model_dump(exclude_unset=True).items():
-        if key != "note":
+        if key not in ("note", "patient_code"):
             setattr(item, key, value)
         
     if item.quantity <= item.min_threshold:
@@ -116,7 +118,15 @@ def update_inventory_item(
     if item.quantity != old_qty:
         diff = item.quantity - old_qty
         action_note = item_in.note if item_in.note else "Manual Update"
-        log_inventory_change(db, item.id, "UPDATE" if diff > 0 else "DISPENSE", abs(diff), current_user.id, action_note)
+        
+        patient_id = None
+        if item_in.patient_code:
+            from app.models.patient import Patient
+            patient = db.query(Patient).filter(Patient.patient_code == item_in.patient_code).first()
+            if patient:
+                patient_id = patient.id
+                
+        log_inventory_change(db, item.id, "UPDATE" if diff > 0 else "DISPENSE", abs(diff), current_user.id, action_note, patient_id)
         
     db.commit()
     db.refresh(item)
@@ -126,7 +136,7 @@ def update_inventory_item(
 def delete_inventory_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.MEDICAL_OFFICER]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
@@ -141,58 +151,90 @@ async def upload_csv(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+    current_user: User = Depends(require_role([UserRole.PHARMACIST, UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     if not file.filename.endswith('.csv'):
+        print("Upload CSV Error: Not a CSV file")
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
     
     contents = await file.read()
     if len(contents) > MAX_CSV_SIZE:
+        print("Upload CSV Error: File too large")
         raise HTTPException(status_code=413, detail="File too large. Max 50MB.")
         
     try:
         df = pd.read_csv(io.BytesIO(contents))
     except Exception as e:
+        print(f"Upload CSV Error: Pandas failed to parse CSV: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")
         
     if len(df) > MAX_CSV_ROWS:
+        print("Upload CSV Error: Too many rows")
         raise HTTPException(status_code=400, detail=f"Too many rows. Max {MAX_CSV_ROWS} rows allowed.")
     
+    df.columns = df.columns.str.lower().str.strip()
+    
     # Required columns
-    required_cols = {'name', 'category', 'quantity', 'unit'}
+    required_cols = {'name', 'quantity'}
     if not required_cols.issubset(set(df.columns)):
-        raise HTTPException(status_code=400, detail=f"CSV must contain columns: {', '.join(required_cols)}")
+        print(f"Upload CSV Error: Missing required columns. Found {df.columns.tolist()}")
+        raise HTTPException(status_code=400, detail=f"CSV must contain columns: {', '.join(required_cols)}. You provided: {', '.join(df.columns)}")
     
     items_added = 0
     for _, row in df.iterrows():
         # Sanitize
         name = sanitize_csv_value(row.get('name'))
-        cat = sanitize_csv_value(row.get('category'))
-        unit = sanitize_csv_value(row.get('unit'))
+        cat = sanitize_csv_value(row.get('category')) if 'category' in df.columns and pd.notna(row.get('category')) else "Medicine"
+        unit = sanitize_csv_value(row.get('unit')) if 'unit' in df.columns and pd.notna(row.get('unit')) else "unit"
         qty = int(row.get('quantity', 0))
-        min_t = int(row.get('min_threshold', 0))
+        min_t = int(row.get('min_threshold', 0)) if 'min_threshold' in df.columns else 0
+        price = int(row.get('price', row.get('price_of_1_unit', 0))) if ('price' in df.columns or 'price_of_1_unit' in df.columns) else 0
         
-        item = InventoryItem(
-            hospital_id=hospital_id,
-            name=name,
-            category=cat,
-            quantity=qty,
-            unit=unit,
-            min_threshold=min_t,
-            status="Normal" if qty > min_t else "Low Stock"
-        )
-        db.add(item)
-        db.flush() # flush to get item.id without committing whole transaction yet
-        
-        if item.status == "Low Stock":
-            notif = Notification(
-                user_id=current_user.id,
-                title="Low Stock Alert (CSV)",
-                message=f"Item {item.name} uploaded with low stock ({item.quantity}/{item.min_threshold})."
+        # Check if item exists with same name and price
+        existing_item = db.query(InventoryItem).filter(
+            InventoryItem.hospital_id == hospital_id,
+            func.lower(InventoryItem.name) == name.lower(),
+            InventoryItem.price == price
+        ).first()
+
+        if existing_item:
+            existing_item.quantity += qty
+            existing_item.status = "Normal" if existing_item.quantity > existing_item.min_threshold else "Low Stock"
+            db.flush()
+            
+            if existing_item.status == "Low Stock":
+                notif = Notification(
+                    user_id=current_user.id,
+                    title="Low Stock Alert (CSV Update)",
+                    message=f"Item {existing_item.name} updated but still has low stock ({existing_item.quantity}/{existing_item.min_threshold})."
+                )
+                db.add(notif)
+            
+            log_inventory_change(db, existing_item.id, "RESTOCK", qty, current_user.id, "CSV Bulk Upload Update")
+        else:
+            item = InventoryItem(
+                hospital_id=hospital_id,
+                name=name,
+                category=cat,
+                quantity=qty,
+                unit=unit,
+                price=price,
+                min_threshold=min_t,
+                status="Normal" if qty > min_t else "Low Stock"
             )
-            db.add(notif)
+            db.add(item)
+            db.flush() # flush to get item.id without committing whole transaction yet
+            
+            if item.status == "Low Stock":
+                notif = Notification(
+                    user_id=current_user.id,
+                    title="Low Stock Alert (CSV)",
+                    message=f"Item {item.name} uploaded with low stock ({item.quantity}/{item.min_threshold})."
+                )
+                db.add(notif)
+            
+            log_inventory_change(db, item.id, "RESTOCK", qty, current_user.id, "CSV Bulk Upload")
         
-        log_inventory_change(db, item.id, "RESTOCK", qty, current_user.id, "CSV Bulk Upload")
         items_added += 1
         
     db.commit()
@@ -204,7 +246,7 @@ def analyze_inventory_ai(
     request: Request,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.PHARMACIST, UserRole.DISTRICT_ADMIN]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.PHARMACIST, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
     # Fetch recent logs or current stock for analysis
     items = db.query(InventoryItem).filter(InventoryItem.hospital_id == hospital_id).all()

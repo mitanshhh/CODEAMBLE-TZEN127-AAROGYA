@@ -299,6 +299,16 @@ Assigned PHC context: {json.dumps(centre_payload, default=str)}
 If the user names another PHC, do not attempt cross-PHC access; answer only from this assigned PHC's scoped rows.
 """
 
+def _clean_explanation(explanation: str) -> str:
+    lines = explanation.split('\n')
+    cleaned = []
+    for line in lines:
+        s = line.strip()
+        if '|' in s and s.count('|') >= 2:
+            continue
+        cleaned.append(line)
+    return '\n'.join(cleaned).strip()
+
 
 def generate_sql_from_groq(db: Session, message: str, current_user: User, hospital_id: Optional[int]) -> GeneratedSql:
     scope_text = (
@@ -312,6 +322,7 @@ You convert natural-language healthcare operations questions into one safe Postg
 
 Rules:
 - Return ONLY valid JSON: {{"intent":"short_intent", "sql":"SELECT ...", "explanation":"short explanation"}}
+- Keep the explanation brief (1-2 sentences). Do NOT include markdown tables, bullet points, or raw data in the explanation. The frontend will render the data tables automatically.
 - SQL must be a single read-only SELECT query.
 - Do not include semicolons, comments, DDL, DML, stored procedure calls, temp tables, functions with side effects, or multiple statements.
 - Use only the virtual tables listed below. Never use base table names such as patients or inventory_items.
@@ -342,7 +353,7 @@ User question:
     return GeneratedSql(
         sql=str(data.get("sql", "")).strip(),
         intent=str(data.get("intent", "live_database_query")).strip() or "live_database_query",
-        explanation=str(data.get("explanation", "")).strip(),
+        explanation=_clean_explanation(str(data.get("explanation", ""))),
         params=_extract_terms(message),
     )
 
@@ -471,7 +482,7 @@ def execute_generated_sql(
         intent=generated.intent or "live_database_query",
         message=pretty_message,
         data=rows,
-        summary={"rows": len(rows), "source": "live_neon_database"},
+        summary={"rows": len(rows), "source": "Database"},
     )
 
 
@@ -482,6 +493,9 @@ def prettify_result_with_groq(intent: str, explanation: str, rows: List[Dict[str
     prompt = f"""
 Write a concise healthcare-operations answer for a dashboard user.
 Do not mention SQL. Do not expose raw JSON. Use the data faithfully.
+CRITICAL RULE: DO NOT INCLUDE A MARKDOWN TABLE OR ANY TABULAR DATA FORMATTING.
+The frontend UI will automatically render the data rows in a native HTML table below your response.
+Your job is ONLY to provide a 1-2 sentence conversational summary or insight about the data.
 Intent: {intent}
 Planner explanation: {explanation}
 Rows: {json.dumps(sample_rows, default=str)}
@@ -491,6 +505,6 @@ Rows: {json.dumps(sample_rows, default=str)}
             {"role": "system", "content": "You format database results for a healthcare operations dashboard."},
             {"role": "user", "content": prompt},
         ], temperature=0.2)
-        return content.strip()[:1500]
+        return _clean_explanation(content.strip()[:1500])
     except Exception:
         return explanation

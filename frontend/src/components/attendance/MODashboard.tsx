@@ -24,6 +24,17 @@ export default function MODashboard() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  
+  // Pagination & Date
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const limit = 10;
+  const [filterDate, setFilterDate] = useState(() => {
+    const today = new Date();
+    const offset = today.getTimezoneOffset();
+    const localDate = new Date(today.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0];
+  });
 
   const fetchData = async () => {
     try {
@@ -31,15 +42,27 @@ export default function MODashboard() {
       const role = localStorage.getItem("role") || "MEDICAL_OFFICER";
       const headers = { 'X-Role': role };
       
-      const hospitalQuery = selectedHospitalId ? `?hospital_id=${selectedHospitalId}` : '';
+      const hospitalQuery = selectedHospitalId ? `hospital_id=${selectedHospitalId}` : '';
+      const offset = (page - 1) * limit;
       
+      const queryParams = new URLSearchParams();
+      if (selectedHospitalId) queryParams.append('hospital_id', selectedHospitalId.toString());
+      queryParams.append('status', filterStatus);
+      queryParams.append('filter_date', filterDate);
+      queryParams.append('limit', limit.toString());
+      queryParams.append('offset', offset.toString());
+
       const [statsRes, recordsRes] = await Promise.all([
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/dashboard${hospitalQuery}`, { headers }),
-        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/records${hospitalQuery ? hospitalQuery + '&' : '?'}status=${filterStatus}`, { headers })
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/dashboard?${hospitalQuery}`, { headers }),
+        apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/attendance/records?${queryParams.toString()}`, { headers })
       ]);
       
       if (statsRes.ok) setStats(await statsRes.json());
-      if (recordsRes.ok) setRecords(await recordsRes.json());
+      if (recordsRes.ok) {
+        const data = await recordsRes.json();
+        setRecords(data.data);
+        setTotalPages(Math.ceil(data.total / limit) || 1);
+      }
     } catch (e) {
       toast.error("Failed to fetch attendance data");
     } finally {
@@ -53,7 +76,7 @@ export default function MODashboard() {
       return;
     }
     fetchData();
-  }, [filterStatus, selectedHospitalId]);
+  }, [filterStatus, selectedHospitalId, page, filterDate]);
 
   const filteredRecords = records.filter(r => 
     r.doctor_name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -144,13 +167,25 @@ export default function MODashboard() {
       {/* Main Table Card */}
       <Card className="border-border shadow-sm overflow-hidden flex flex-col h-full">
         <div className="p-4 border-b border-border flex flex-wrap justify-between items-center bg-muted/20 gap-4">
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center flex-wrap">
+            <div className="relative mr-2">
+              <CalendarIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="date"
+                className="pl-9 h-9 w-40 bg-background text-sm"
+                value={filterDate}
+                onChange={(e) => {
+                  setFilterDate(e.target.value);
+                  setPage(1); // Reset to page 1 on date change
+                }}
+              />
+            </div>
             {['All', 'Present', 'Late', 'Absent', 'On Leave'].map(status => (
               <Badge 
                 key={status} 
                 variant={filterStatus === status ? "default" : "outline"}
                 className={`cursor-pointer ${filterStatus === status ? '' : 'hover:bg-muted/50'}`}
-                onClick={() => setFilterStatus(status)}
+                onClick={() => { setFilterStatus(status); setPage(1); }}
               >
                 {status}
               </Badge>
@@ -317,6 +352,31 @@ export default function MODashboard() {
               )}
             </TableBody>
           </Table>
+        </div>
+        
+        {/* Pagination Controls */}
+        <div className="p-4 border-t border-border flex justify-between items-center bg-muted/5">
+          <div className="text-sm text-muted-foreground">
+            Showing page {page} of {totalPages}
+          </div>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+            >
+              Previous
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages || loading}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

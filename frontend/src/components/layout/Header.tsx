@@ -51,7 +51,7 @@ export function Header({ setIsMobileOpen }: HeaderProps) {
   const fetchHospitals = async () => {
     if (!token || (user?.role !== 'DISTRICT_ADMIN' && user?.role !== 'DEVELOPER')) return;
     try {
-      const res = await apiFetch(`${API_BASE_URL}/api/v1/phc/`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/v1/phc`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {

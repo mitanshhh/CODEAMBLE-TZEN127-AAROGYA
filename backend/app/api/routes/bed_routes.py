@@ -48,7 +48,7 @@ def get_beds(
 def create_bed(
     bed_in: BedCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     # If not district admin, can only create bed in their own hospital
     if current_user.role != UserRole.DISTRICT_ADMIN and current_user.hospital_id != bed_in.hospital_id:
@@ -66,7 +66,7 @@ def update_bed(
     bed_in: BedUpdate,
     db: Session = Depends(get_db),
     hospital_id: int = Depends(resolve_hospital_id),
-    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
+    current_user: User = Depends(require_role([UserRole.MEDICAL_OFFICER, UserRole.DEVELOPER]))
 ):
     bed = db.query(Bed).filter(Bed.id == bed_id, Bed.hospital_id == hospital_id).first()
     if not bed:
@@ -140,6 +140,8 @@ def admit_patient(
         raise HTTPException(status_code=404, detail="Bed not found")
     if bed.status != "Available":
         raise HTTPException(status_code=400, detail="Bed is not available")
+    if not payload.patient_name or not payload.patient_name.strip():
+        raise HTTPException(status_code=400, detail="Patient name is required")
     
     # Check if patient exists by patient_code
     existing_patient = None
@@ -150,6 +152,11 @@ def admit_patient(
         ).first()
 
     if existing_patient:
+        # Check if the patient is already assigned to another bed
+        existing_bed = db.query(Bed).filter(Bed.patient_id == existing_patient.id).first()
+        if existing_bed and existing_bed.id != bed_id:
+            raise HTTPException(status_code=400, detail=f"Patient is already assigned to Bed {existing_bed.bed_number}")
+            
         patient_record = existing_patient
         patient_record.status = "Admitted"
         if payload.admission_reason:
@@ -161,23 +168,30 @@ def admit_patient(
         patient_record = Patient(
             hospital_id=hospital_id,
             patient_code=payload.patient_code.strip() if payload.patient_code else None,
-            name=payload.patient_name,
+            name=payload.patient_name.strip(),
             contact=payload.patient_phone,
             medical_history=payload.admission_reason,
             status="Admitted",
             age=0,
-            gender="Unknown"
+            gender="Unknown",
+            admitted_at=datetime.now(timezone.utc)
         )
         db.add(patient_record)
         db.flush()
         if not patient_record.patient_code:
             patient_record.patient_code = f"PT-{str(patient_record.id).zfill(4)}"
+        db.refresh(patient_record)
 
-    bed.status = "Occupied"
+    if payload.action == "Reserve":
+        bed.status = "Reserved"
+    else:
+        bed.status = "Occupied"
+        
     bed.patient_id = patient_record.id
     bed.admitted_at = datetime.now(timezone.utc)
     
-    log_audit(db, patient_record.id, current_user.id, "CREATE", f"Admitted to bed {bed.bed_number}")
+    action_text = "Reserved" if payload.action == "Reserve" else "Admitted to"
+    log_audit(db, patient_record.id, current_user.id, "BED_ALLOCATED", f"{action_text} bed {bed.bed_number}")
     db.commit()
     db.refresh(bed)
     return bed
@@ -192,10 +206,12 @@ def discharge_patient(
     bed = db.query(Bed).filter(Bed.id == bed_id, Bed.hospital_id == hospital_id).first()
     if not bed:
         raise HTTPException(status_code=404, detail="Bed not found")
-    if not bed.patient_id:
-        raise HTTPException(status_code=400, detail="Bed is not occupied")
         
-    patient = db.query(Patient).filter(Patient.id == bed.patient_id).first()
+    patient = None
+    if bed.patient_id:
+        patient = db.query(Patient).filter(Patient.id == bed.patient_id).first()
+    elif bed.status not in ["Occupied", "Reserved"]:
+        raise HTTPException(status_code=400, detail="Bed is not occupied or reserved")
     
     bed.status = "Cleaning"
     bed.patient_id = None
@@ -204,7 +220,7 @@ def discharge_patient(
     if patient:
         patient.status = "Discharged"
         patient.discharged_at = datetime.now(timezone.utc)
-        log_audit(db, patient.id, current_user.id, "EDIT", "Discharged patient")
+        log_audit(db, patient.id, current_user.id, "BED_RELEASED", "Discharged patient")
     
     db.commit()
     

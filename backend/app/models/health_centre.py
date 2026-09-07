@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 
@@ -23,6 +24,8 @@ class HealthCentre(Base):
     admin_mobile = Column(String, nullable=True)
     location = Column(String, nullable=True)
     health_score = Column(Integer, default=100)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     status = Column(String, default="Active")
 
     # Relationships

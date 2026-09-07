@@ -114,7 +114,7 @@ export default function DistrictAdminDashboard() {
     }
 
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/phc/`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/phc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -277,7 +277,10 @@ export default function DistrictAdminDashboard() {
           <DialogHeader>
             <DialogTitle>Evaluate Resource Request</DialogTitle>
             <DialogDescription>
-              Review the request for <strong>{selectedReq?.resource_name}</strong> from PHC ID <strong>{selectedReq?.requesting_phc_id}</strong>.
+              Review the request for <strong>{selectedReq?.resource_name}</strong> from PHC ID <strong>{selectedReq?.requesting_phc_id}</strong>
+              {selectedReq?.requested_by_user_id ? (
+                <span> (User ID: <strong>{selectedReq.requested_by_user_id}</strong>)</span>
+              ) : null}.
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -297,8 +300,8 @@ export default function DistrictAdminDashboard() {
               <Sparkles className="w-3 h-3" /> An AI approval letter will be sent automatically.
             </p>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setSelectedReq(null)}>Cancel</Button>
+          <DialogFooter className="gap-3 sm:gap-3 sm:justify-end">
+            <Button variant="outline" onClick={() => setSelectedReq(null)} className="cursor-pointer">Cancel</Button>
             <Button onClick={handleReject} className="bg-red-100 text-red-600 hover:bg-red-600 hover:text-white cursor-pointer transition-colors border-none"><X className="w-4 h-4 mr-2" /> Reject</Button>
             <Button onClick={handleApprove} className="flex items-center gap-2 cursor-pointer hover:shadow-md transition-shadow"><CheckCircle className="w-4 h-4" /> Approve & Notify</Button>
           </DialogFooter>

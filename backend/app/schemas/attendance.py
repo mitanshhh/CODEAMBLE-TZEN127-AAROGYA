@@ -25,3 +25,7 @@ class QRScanRequest(BaseModel):
     lat: float
     lng: float
     doctor_id: int
+
+class QRGenerateRequest(BaseModel):
+    lat: Optional[float] = None
+    lng: Optional[float] = None
