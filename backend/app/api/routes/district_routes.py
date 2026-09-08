@@ -32,14 +32,24 @@ def get_map_data(
         for c in centres
     ]
 
+import time
+
+_OVERVIEW_CACHE = {"timestamp": 0.0, "data": None}
+_OVERVIEW_CACHE_TTL = 15.0
+
 @router.get("/overview")
 def get_district_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role([UserRole.DISTRICT_ADMIN, UserRole.DEVELOPER]))
 ):
+    now = time.time()
+    if _OVERVIEW_CACHE["data"] and (now - _OVERVIEW_CACHE["timestamp"] < _OVERVIEW_CACHE_TTL):
+        return _OVERVIEW_CACHE["data"]
+
     from app.models.bed import Bed
     from app.models.inventory import InventoryItem
     from app.models.attendance import AttendanceRecord, DailyQRSession
+    from app.services.health_score import calculate_batch_health_scores
     from datetime import datetime
     
     phcs = db.query(HealthCentre).filter(HealthCentre.type == "PHC").count()
@@ -54,13 +64,11 @@ def get_district_overview(
     medicine_alerts = db.query(InventoryItem).filter(InventoryItem.quantity <= InventoryItem.min_threshold).count()
     
     # Critical centres: status == 'Critical' or health_score < 50 or 0 available beds
-    from app.services.health_score import calculate_health_score
-    
-    # We need to evaluate the live health score for all active centres
     all_centres = db.query(HealthCentre).all()
+    scores = calculate_batch_health_scores(db, [c.id for c in all_centres])
     critical_centres = 0
     for c in all_centres:
-        live_score = calculate_health_score(db, c.id)
+        live_score = scores.get(c.id, 0.0)
         if c.status == "Critical" or live_score < 50 or (c.available_beds == 0 and c.total_beds > 0):
             critical_centres += 1
     
@@ -74,7 +82,7 @@ def get_district_overview(
     total_docs = db.query(User).filter(User.role == UserRole.DOCTOR).count()
     doctor_presence_rate = round((present_docs / total_docs * 100), 1) if total_docs > 0 else 0
     
-    return {
+    result = {
         "total_phcs": phcs,
         "total_chcs": chcs,
         "doctor_presence_rate": doctor_presence_rate,
@@ -82,6 +90,10 @@ def get_district_overview(
         "medicine_alerts": medicine_alerts,
         "critical_centres": critical_centres,
     }
+    _OVERVIEW_CACHE["data"] = result
+    _OVERVIEW_CACHE["timestamp"] = now
+    return result
+
 
 @router.get("/requests", response_model=List[ResourceRequestResponse])
 def get_all_requests(

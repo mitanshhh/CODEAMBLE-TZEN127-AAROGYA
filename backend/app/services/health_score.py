@@ -44,3 +44,86 @@ def calculate_health_score(db: Session, hospital_id: int) -> float:
     # 4. Patient Flow & Throughput (15% weight) - Simplified for MVP
     
     return max(0.0, min(100.0, score))
+
+
+def calculate_batch_health_scores(db: Session, hospital_ids: list[int]) -> dict[int, float]:
+    """Calculate health scores for multiple hospitals in batch using aggregated queries."""
+    if not hospital_ids:
+        return {}
+        
+    scores = {hid: 100.0 for hid in hospital_ids}
+    
+    from sqlalchemy import func, case
+    
+    # 1. Beds by hospital
+    bed_stats = db.query(
+        Bed.hospital_id,
+        func.count(Bed.id).label("total"),
+        func.sum(case((Bed.status == "Occupied", 1), else_=0)).label("occupied")
+    ).filter(Bed.hospital_id.in_(hospital_ids)).group_by(Bed.hospital_id).all()
+    
+    bed_map = {row.hospital_id: (row.total or 0, row.occupied or 0) for row in bed_stats}
+    
+    for hid in hospital_ids:
+        total_beds, occupied_beds = bed_map.get(hid, (0, 0))
+        if total_beds > 0:
+            occupancy_rate = occupied_beds / total_beds
+            if occupancy_rate > 0.85:
+                scores[hid] -= (occupancy_rate - 0.85) * 100 * 0.3
+            elif occupancy_rate < 0.70:
+                scores[hid] -= (0.70 - occupancy_rate) * 100 * 0.3
+        else:
+            scores[hid] -= 30  # Penalty for no beds
+
+    # 2. Inventory stock health
+    inv_stats = db.query(
+        InventoryItem.hospital_id,
+        func.count(InventoryItem.id).label("total"),
+        func.sum(case((InventoryItem.status == "Low Stock", 1), else_=0)).label("low_stock")
+    ).filter(InventoryItem.hospital_id.in_(hospital_ids)).group_by(InventoryItem.hospital_id).all()
+    
+    inv_map = {row.hospital_id: (row.total or 0, row.low_stock or 0) for row in inv_stats}
+    
+    for hid in hospital_ids:
+        total_items, low_stock = inv_map.get(hid, (0, 0))
+        if total_items > 0:
+            low_stock_ratio = low_stock / total_items
+            scores[hid] -= (low_stock_ratio * 100 * 0.3)
+
+    # 3. Staff attendance rate
+    today = get_now_ist().date()
+    sessions = db.query(DailyQRSession).filter(
+        DailyQRSession.hospital_id.in_(hospital_ids),
+        DailyQRSession.date == today
+    ).all()
+    session_map = {s.hospital_id: s.id for s in sessions}
+    
+    # Total doctors by hospital
+    doc_stats = db.query(
+        Doctor.hospital_id,
+        func.count(Doctor.id).label("total")
+    ).filter(Doctor.hospital_id.in_(hospital_ids)).group_by(Doctor.hospital_id).all()
+    doc_map = {row.hospital_id: (row.total or 0) for row in doc_stats}
+    
+    # Attendance counts for existing sessions
+    attendance_map = {}
+    if session_map:
+        session_ids = list(session_map.values())
+        att_stats = db.query(
+            AttendanceRecord.session_id,
+            func.count(AttendanceRecord.id).label("present")
+        ).filter(AttendanceRecord.session_id.in_(session_ids)).group_by(AttendanceRecord.session_id).all()
+        attendance_map = {row.session_id: (row.present or 0) for row in att_stats}
+        
+    for hid in hospital_ids:
+        total_doctors = doc_map.get(hid, 0)
+        session_id = session_map.get(hid)
+        if session_id and total_doctors > 0:
+            present = attendance_map.get(session_id, 0)
+            absence_rate = (total_doctors - present) / total_doctors
+            scores[hid] -= (absence_rate * 100 * 0.25)
+        else:
+            scores[hid] -= 25  # Penalty for missing QR session or no doctors
+
+    return {hid: max(0.0, min(100.0, score)) for hid, score in scores.items()}
+

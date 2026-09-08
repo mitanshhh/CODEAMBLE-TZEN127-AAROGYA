@@ -9,7 +9,7 @@ from app.schemas.health_centre import HealthCentreCreateResponse, HealthCentreRe
 from app.api.dependencies import get_current_user, require_role, resolve_hospital_id
 from app.core.security import get_password_hash
 from app.services.email_service import send_onboarding_email
-from app.services.health_score import calculate_health_score
+from app.services.health_score import calculate_health_score, calculate_batch_health_scores
 import secrets
 
 router = APIRouter()
@@ -97,9 +97,11 @@ def get_all_centres(
         
     centres = query.offset(skip).limit(limit).all()
     
-    # Calculate live health score
+    # Calculate live health score in batch
+    centre_ids = [c.id for c in centres]
+    scores = calculate_batch_health_scores(db, centre_ids)
     for c in centres:
-        c.health_score = int(calculate_health_score(db, c.id))
+        c.health_score = int(scores.get(c.id, 0.0))
     
     response.headers["X-Total-Count"] = str(total_count)
     # Allows frontend to read the custom header in CORS if applicable (assuming CORS config allows it or they are same-origin)
